@@ -1,0 +1,333 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, Calendar, Plane, MapPin, AlertCircle, Clock } from "lucide-react";
+import { AIRPORTS } from "@/data/airports";
+import { Flight } from "@/types";
+
+interface AddTripModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onAdd: (trip: any) => void;
+    isHistoryMode?: boolean;
+    flightToEdit?: Flight | null;
+}
+
+export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = false, flightToEdit }: AddTripModalProps) {
+    // Flight Info
+    const [flightNum, setFlightNum] = useState("");
+
+    // Origin Info
+    const [origin, setOrigin] = useState("");
+    const [originDate, setOriginDate] = useState("");
+    const [originTime, setOriginTime] = useState("");
+
+    // Destination Info
+    const [destination, setDestination] = useState("");
+    const [destDate, setDestDate] = useState("");
+    const [destTime, setDestTime] = useState("");
+
+    // Validation Errors
+    const [errors, setErrors] = useState<{ origin?: string; destination?: string }>({});
+
+    // Reset or Populate form on open
+    useEffect(() => {
+        if (isOpen) {
+            if (flightToEdit) {
+                // Populate from existing flight
+                setFlightNum(flightToEdit.flight_number.replace(/^\D+/g, '')); // Remove EK or other non-digits
+
+                setOrigin(flightToEdit.origin_code);
+
+                // Parse dates assuming they are ISO strings
+                // We need to extract the date and time parts
+                // Note: The previous save logic saved them as global ISO strings. 
+                // To fill the input type="date" and "time", we need YYYY-MM-DD and HH:mm
+                const start = new Date(flightToEdit.departure_time);
+                const end = new Date(flightToEdit.arrival_time);
+
+                setOriginDate(start.toISOString().split('T')[0]);
+                // Use UTC to prevent timezone shifting on edit - treat stored time as wall clock
+                setOriginTime(start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }));
+
+                setDestination(flightToEdit.destination_code);
+                setDestDate(end.toISOString().split('T')[0]);
+                setDestTime(end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }));
+
+                setErrors({});
+            } else {
+                // Reset to defaults
+                setOrigin("");
+                setDestination("");
+                setFlightNum("");
+                const today = new Date().toISOString().split('T')[0];
+                setOriginDate(today);
+                setDestDate(today);
+                setOriginTime("");
+                setDestTime("");
+                setErrors({});
+            }
+        }
+    }, [isOpen, flightToEdit]);
+
+    const handleTimeChange = (val: string, setter: (v: string) => void) => {
+        const digits = val.replace(/\D/g, '').slice(0, 4);
+        let formatted = digits;
+        if (digits.length >= 3) {
+            formatted = digits.slice(0, 2) + ':' + digits.slice(2);
+        }
+        setter(formatted);
+    };
+
+    const validateAirport = (code: string) => {
+        return AIRPORTS[code.toUpperCase()] !== undefined;
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const newErrors: { origin?: string; destination?: string } = {};
+
+        if (!validateAirport(origin)) {
+            newErrors.origin = "Invalid";
+        }
+        if (!validateAirport(destination)) {
+            newErrors.destination = "Invalid";
+        }
+
+        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(originTime)) {
+            newErrors.origin = "Check Time";
+        }
+        if (!timeRegex.test(destTime)) {
+            newErrors.destination = "Check Time";
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            return;
+        }
+
+        const originData = AIRPORTS[origin.toUpperCase()];
+        const destData = AIRPORTS[destination.toUpperCase()];
+
+        // Note: Dates/Times are stored as ISO strings but conceptually represent
+        // the local time at the respective airport, as per requirement.
+        // We will likely need a helper to calculate duration or convert for global comparison later.
+
+        onAdd({
+            origin_code: origin.toUpperCase(),
+            origin_city: originData.city,
+            destination_code: destination.toUpperCase(),
+            destination_city: destData.city,
+            flight_number: `EK${flightNum}`,
+            departure_time: `${originDate}T${originTime}`, // Stored as "wall clock" ISO string (no Z)
+            arrival_time: `${destDate}T${destTime}`,     // Stored as "wall clock" ISO string (no Z)
+            status: isHistoryMode ? "completed" : "scheduled",
+            type: isHistoryMode ? "past" : "future",
+        });
+        onClose();
+    };
+
+    // Date Restrictions
+    const today = new Date().toISOString().split('T')[0];
+
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <>
+                    {/* Backdrop */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        className="fixed inset-0 bg-black/80 backdrop-blur-md z-[60]"
+                    />
+
+                    {/* Modal */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 100, scale: 0.95 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, y: 100, scale: 0.95 }}
+                        transition={{ type: "spring", stiffness: 350, damping: 25 }}
+                        className="fixed inset-x-4 bottom-8 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border border-white/10 rounded-[32px] p-8 z-[70] shadow-2xl overflow-hidden"
+                    >
+                        {/* Decorative background glow */}
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />
+
+                        <div className="flex items-center justify-between mb-8">
+                            <div className="flex flex-col">
+                                <h2 className="text-xl font-bold text-white tracking-widest uppercase">
+                                    {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "New Horizon")}
+                                </h2>
+                                <span className="text-[10px] text-white/40 uppercase tracking-wider">
+                                    {isHistoryMode ? "Add to your vault" : "Next adventure awaits"}
+                                </span>
+                            </div>
+                            <button onClick={onClose} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-8">
+
+                            {/* 1. Header: Flight Number */}
+                            <div className="flex flex-col items-center justify-center border-b border-white/5 pb-8">
+                                <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">Flight Number</label>
+                                <div className="relative flex items-center justify-center">
+                                    <span className="text-4xl font-bold text-white/40 tracking-tighter mr-2">EK</span>
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        value={flightNum}
+                                        onChange={(e) => setFlightNum(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                        placeholder="000"
+                                        className="bg-transparent border-none text-4xl w-32 font-bold text-white tracking-tighter placeholder:text-white/10 focus:outline-none text-center p-0"
+                                        autoFocus
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            {/* 2. Dual Column Layout */}
+                            <div className="grid grid-cols-2 gap-8 relative">
+                                {/* Decor: Center Divider */}
+                                <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/5 -translate-x-1/2 hidden md:block" />
+
+                                {/* LEFT: ORIGIN */}
+                                <div className="space-y-5">
+                                    {/* Airport Code */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] uppercase tracking-widest text-emirates-red font-bold flex items-center gap-2">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-emirates-red" />
+                                            Depart From
+                                        </label>
+                                        <div className="relative group">
+                                            <input
+                                                type="text"
+                                                value={origin}
+                                                onChange={(e) => {
+                                                    setOrigin(e.target.value);
+                                                    if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
+                                                }}
+                                                maxLength={3}
+                                                placeholder="DXB"
+                                                className={`w-full h-16 bg-white/5 border rounded-2xl text-center text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.origin ? 'border-red-500/50' : 'border-white/10 focus:border-emirates-red/50'}`}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Date */}
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
+                                        <div className="relative">
+                                            <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+                                            <input
+                                                type="date"
+                                                value={originDate}
+                                                min={!isHistoryMode ? today : undefined}
+                                                max={isHistoryMode ? today : undefined}
+                                                onChange={(e) => setOriginDate(e.target.value)}
+                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Time */}
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
+                                        <div className="relative">
+                                            <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                maxLength={5}
+                                                placeholder="00:00"
+                                                value={originTime}
+                                                onChange={(e) => handleTimeChange(e.target.value, setOriginTime)}
+                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all placeholder:text-white/10"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+
+                                {/* RIGHT: DESTINATION */}
+                                <div className="space-y-5">
+                                    {/* Airport Code */}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] uppercase tracking-widest text-dubai-gold font-bold flex items-center gap-2 justify-end">
+                                            Arrive At
+                                            <div className="w-1.5 h-1.5 rounded-full bg-dubai-gold" />
+                                        </label>
+                                        <div className="relative group">
+                                            <input
+                                                type="text"
+                                                value={destination}
+                                                onChange={(e) => {
+                                                    setDestination(e.target.value);
+                                                    if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
+                                                }}
+                                                maxLength={3}
+                                                placeholder="LHR"
+                                                className={`w-full h-16 bg-white/5 border rounded-2xl text-center text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.destination ? 'border-red-500/50' : 'border-white/10 focus:border-dubai-gold/50'}`}
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Date */}
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold mr-1 text-right block">Date</label>
+                                        <div className="relative">
+                                            <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+                                            <input
+                                                type="date"
+                                                value={destDate}
+                                                min={originDate}
+                                                onChange={(e) => setDestDate(e.target.value)}
+                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pr-12 pl-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all [color-scheme:dark] text-right [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Time */}
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold mr-1 text-right block">Time</label>
+                                        <div className="relative">
+                                            <Clock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                maxLength={5}
+                                                placeholder="00:00"
+                                                value={destTime}
+                                                onChange={(e) => handleTimeChange(e.target.value, setDestTime)}
+                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pr-12 pl-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all placeholder:text-white/10 text-right"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button
+                                type="submit"
+                                className="w-full py-5 rounded-2xl bg-white text-black text-sm font-bold tracking-widest uppercase mt-4 hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
+                            >
+                                <span className="relative z-10">{flightToEdit ? "Update Journey" : "Confirm Journey"}</span>
+                                <Plane size={16} className="relative z-10 rotate-45 mb-1" />
+                            </button>
+                        </form>
+                    </motion.div>
+                </>
+            )}
+        </AnimatePresence>
+    );
+}

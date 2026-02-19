@@ -1,0 +1,62 @@
+@import "tailwindcss";
+
+@theme {
+  --color-emirates-red: #D71A21;
+  --color-dubai-gold: #D4AF37;
+  --color-glass: rgba(255, 255, 255, 0.1);
+  --color-glass-dark: rgba(0, 0, 0, 0.3);
+
+  --font-sans: "SF Pro Display", var(--font-inter), var(--font-geist-sans);
+}
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+  --emirates-red: #D71A21;
+  --dubai-gold: #D4AF37;
+}
+
+html,
+body {
+  background-color: black;
+  /* Force black background */
+  width: 100%;
+  overflow-x: hidden;
+  /* Prevent horizontal scroll */
+  overscroll-behavior-y: none;
+  /* Prevent bounce effect showing background */
+}
+
+body {
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/10 backdrop-blur-[25px] border border-white/20;
+  }
+
+  .glass-dark {
+    @apply bg-black/30 backdrop-blur-[25px] border border-white/10;
+  }
+
+  .text-shadow-gold {
+    text-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
+  }
+
+  /* Hide scrollbar for Chrome, Safari and Opera */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Hide scrollbar for IE, Edge and Firefox */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    /* IE and Edge */
+    scrollbar-width: none;
+    /* Firefox */
+  }
+}
