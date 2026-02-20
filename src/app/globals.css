@@ -14,18 +14,21 @@
   --foreground: #ffffff;
   --emirates-red: #D71A21;
   --dubai-gold: #D4AF37;
+  --dynamic-background: #000000;
 }
 
 html,
 body {
-  background-color: black;
-  /* Force black background */
+  background-color: var(--dynamic-background);
+  /* Force dynamic background */
   width: 100%;
   overflow-x: hidden;
   /* Prevent horizontal scroll */
   overscroll-behavior-y: none;
   /* Prevent bounce effect showing background */
+  transition: background-color 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
 
 body {
   color: var(--foreground);

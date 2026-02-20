@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { History, ArrowUpDown } from "lucide-react";
+import { useThemeColor } from "@/hooks/useThemeColor";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -327,23 +328,9 @@ export default function Home() {
     },
   };
 
-  useEffect(() => {
-    // Sync body and html background color for edge/bounce areas and safe areas
-    document.body.style.backgroundColor = primaryColor;
-    document.documentElement.style.backgroundColor = primaryColor;
+  // Sync background and theme-color with browser UI
+  useThemeColor(primaryColor);
 
-    // Update theme-color meta tag for mobile browser UI (Android/Chrome/Safari 15+)
-    let metaThemeColor = document.querySelector("meta[name='theme-color']") as HTMLMetaElement | null;
-    if (!metaThemeColor) {
-      metaThemeColor = document.createElement("meta");
-      metaThemeColor.name = "theme-color";
-      document.head.appendChild(metaThemeColor);
-    }
-    metaThemeColor.content = primaryColor;
-
-    // Update status bar style for older iOS devices or PWA mode (though theme-color usually wins on modern iOS)
-    // We can try to force 'black-translucent' or similar if needed, but usually theme-color is enough.
-  }, [primaryColor]);
 
   return (
     <main className="h-[100dvh] min-h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col">
