@@ -152,7 +152,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                        className="fixed inset-x-4 bottom-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border border-white/10 rounded-[32px] p-5 md:p-8 z-[70] shadow-2xl overflow-y-auto max-h-[85vh] md:max-h-[90vh] custom-scrollbar"
+                        className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border-t border-x md:border border-white/10 rounded-t-[32px] rounded-b-none md:rounded-[32px] p-5 pb-10 md:p-8 z-[70] shadow-2xl overflow-y-auto max-h-[85vh] md:max-h-[90vh] custom-scrollbar"
                     >
                         {/* Decorative background glow */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />

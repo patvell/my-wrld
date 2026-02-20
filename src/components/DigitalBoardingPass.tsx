@@ -181,13 +181,13 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-0 pointer-events-none">
                         <div className="flex flex-col items-center justify-center">
                             <div className="flex items-center gap-1.5 mb-2">
-                                <Plane size={14} className="text-dubai-gold fill-dubai-gold rotate-45" />
-                                <span className="text-lg font-black text-dubai-gold tracking-tight">EK{flightNumber}</span>
+                                <Plane size={14} className="text-white fill-white rotate-45" />
+                                <span className="text-lg font-black text-white tracking-tight">EK{flightNumber}</span>
                             </div>
                             {/* Animated Line */}
                             <div className="w-24 h-[1px] bg-white/10 overflow-hidden relative">
                                 <motion.div
-                                    className="absolute inset-y-0 left-0 w-1/3 bg-dubai-gold/60 blur-[1px]"
+                                    className="absolute inset-y-0 left-0 w-1/3 bg-white/60 blur-[1px]"
                                     animate={{ x: ["-100%", "300%"] }}
                                     transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
                                 />
