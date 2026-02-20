@@ -152,12 +152,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                        className="fixed inset-x-4 bottom-8 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border border-white/10 rounded-[32px] p-6 md:p-8 z-[70] shadow-2xl overflow-hidden"
+                        className="fixed inset-x-4 bottom-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border border-white/10 rounded-[32px] p-5 md:p-8 z-[70] shadow-2xl overflow-y-auto max-h-[85vh] md:max-h-[90vh] custom-scrollbar"
                     >
                         {/* Decorative background glow */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />
 
-                        <div className="flex items-center justify-between mb-6 md:mb-8">
+                        <div className="flex items-center justify-between mb-4 md:mb-8">
                             <div className="flex flex-col">
                                 <h2 className="text-xl font-bold text-white tracking-widest uppercase">
                                     {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "New Horizon")}
@@ -171,7 +171,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-8">
+                        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
 
                             {/* 1. Header: Flight Number */}
                             <div className="flex flex-col items-center justify-center border-b border-white/5 pb-6 md:pb-8">
@@ -193,12 +193,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                             </div>
 
                             {/* 2. Dual Column Layout */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 relative">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8 relative">
                                 {/* Decor: Center Divider */}
                                 <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/5 -translate-x-1/2 hidden md:block" />
 
                                 {/* LEFT: ORIGIN */}
-                                <div className="space-y-5">
+                                <div className="space-y-4 md:space-y-5">
                                     {/* Airport Code */}
                                     <div className="space-y-2">
                                         <label htmlFor="origin-input" className="text-[10px] uppercase tracking-widest text-emirates-red font-bold flex items-center gap-2">
@@ -216,7 +216,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 }}
                                                 maxLength={3}
                                                 placeholder="DXB"
-                                                className={`w-full h-16 bg-white/5 border rounded-2xl text-center text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.origin ? 'border-red-500/50' : 'border-white/10 focus:border-emirates-red/50'}`}
+                                                className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.origin ? 'border-red-500/50' : 'border-white/10 focus:border-emirates-red/50'}`}
                                                 required
                                             />
                                         </div>
@@ -262,7 +262,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
 
                                 {/* RIGHT: DESTINATION */}
-                                <div className="space-y-5">
+                                <div className="space-y-4 md:space-y-5">
                                     {/* Airport Code */}
                                     <div className="space-y-2">
                                         <label htmlFor="dest-input" className="text-[10px] uppercase tracking-widest text-dubai-gold font-bold flex items-center gap-2 justify-start md:justify-end">
@@ -281,7 +281,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 }}
                                                 maxLength={3}
                                                 placeholder="LHR"
-                                                className={`w-full h-16 bg-white/5 border rounded-2xl text-center text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.destination ? 'border-red-500/50' : 'border-white/10 focus:border-dubai-gold/50'}`}
+                                                className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.destination ? 'border-red-500/50' : 'border-white/10 focus:border-dubai-gold/50'}`}
                                                 required
                                             />
                                         </div>

@@ -262,12 +262,22 @@ export default function Home() {
   };
 
   useEffect(() => {
-    // Sync body background color for edge/bounce areas
+    // Sync body and html background color for edge/bounce areas and safe areas
     document.body.style.backgroundColor = primaryColor;
+    document.documentElement.style.backgroundColor = primaryColor;
+
+    // Update theme-color meta tag for mobile browser UI
+    let metaThemeColor = document.querySelector("meta[name='theme-color']") as HTMLMetaElement | null;
+    if (!metaThemeColor) {
+      metaThemeColor = document.createElement("meta");
+      metaThemeColor.name = "theme-color";
+      document.head.appendChild(metaThemeColor);
+    }
+    metaThemeColor.content = primaryColor;
   }, [primaryColor]);
 
   return (
-    <main className="h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col">
+    <main className="h-[100dvh] min-h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col">
       {/* Full Screen Background */}
       <LiquidBackground primaryColor={primaryColor} />
 
