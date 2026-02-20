@@ -15,9 +15,10 @@ interface BoardingPassProps {
     onEdit?: (id: string) => void;
     isShifted?: boolean;
     onToggleShift?: () => void;
+    isActive?: boolean;
 }
 
-export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift }: BoardingPassProps) {
+export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false }: BoardingPassProps) {
     const [mounted, setMounted] = useState(false);
     // Internal isShifted state removed in favor of props
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -50,10 +51,12 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
 
     const isImminent = hoursUntil < 24 && hoursUntil > 0;
 
-    // Pulse effect for imminent flights - White hue
-    const statusColor = isImminent
-        ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.2)] border-white/40 bg-white/5"
-        : "border-white/5";
+    // Live Active State - White Hue
+    const internalStatusColor = isActive
+        ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.4)] border-white/60 bg-white/10"
+        : (isImminent ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.2)] border-white/40 bg-white/5" : "border-white/5");
+
+    const statusColor = internalStatusColor;
 
     // Format helpers
     const formatDate = (isoString: string) => {
@@ -91,6 +94,12 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     };
 
     const toggleShift = () => {
+        if (isActive) {
+            // Open FlightAware
+            window.open(`https://www.flightaware.com/live/flight/UAE${flightNumber}`, '_blank');
+            return;
+        }
+
         // Reset delete confirmation when closing (if it was open)
         if (isShifted) {
             setIsConfirmingDelete(false);
@@ -112,12 +121,12 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         x: isShifted ? 0 : 20
                     }}
                     transition={{
-                        // Wait for card to move (0.3s) before showing. Hide instantly (0s) when closing.
-                        delay: isShifted ? 0.3 : 0,
-                        type: "spring", stiffness: 500, damping: 25
+                        // Open: Wait strictly for card to finish (0.6s). Close: Hide immediately (0s).
+                        delay: isShifted ? 0.6 : 0,
+                        type: "spring", stiffness: 400, damping: 35
                     }}
                     onClick={handleEdit}
-                    className="w-12 h-12 rounded-full flex items-center justify-center bg-white/10 backdrop-blur-md border border-white/20 text-white hover:bg-white/20 transition-all shadow-xl"
+                    className="w-12 h-12 rounded-full flex items-center justify-center bg-black/40 backdrop-blur-md border border-white/10 text-white hover:bg-white/10 transition-all"
                 >
                     {isConfirmingDelete ? <X size={18} /> : <Edit size={18} />}
                 </motion.button>
@@ -127,19 +136,19 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         scale: isShifted ? 1 : 0.8,
                         opacity: isShifted ? 1 : 0,
                         x: isShifted ? 0 : 20,
-                        backgroundColor: isConfirmingDelete ? "rgba(239, 68, 68, 0.8)" : "rgba(255, 255, 255, 0.1)"
+                        backgroundColor: isConfirmingDelete ? "rgba(239, 68, 68, 0.8)" : "rgba(0, 0, 0, 0.4)"
                     }}
                     transition={{
-                        // Stagger slightly after edit button (0.35s). Hide instantly when closing.
-                        delay: isShifted ? 0.35 : 0,
-                        type: "spring", stiffness: 500, damping: 25
+                        // Open: Stagger slightly after edit (0.65s). Close: Hide immediately (0s).
+                        delay: isShifted ? 0.65 : 0,
+                        type: "spring", stiffness: 400, damping: 35
                     }}
                     onClick={handleDelete}
                     className={cn(
-                        "w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md border border-white/20 text-white transition-all shadow-xl",
+                        "w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 text-white transition-all",
                         // Hover state handled by motion animate for bg, but adding hover for non-motion props if needed
-                        !isConfirmingDelete && "hover:bg-white/20",
-                        isConfirmingDelete && "hover:bg-red-600/90 border-red-400/50 box-shadow-red-500/20"
+                        !isConfirmingDelete && "hover:bg-white/10",
+                        isConfirmingDelete && "hover:bg-red-600/90 border-red-400/50"
                     )}
                 >
                     {isConfirmingDelete ? <Check size={18} /> : <Trash2 size={18} />}
@@ -150,15 +159,17 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
             <motion.div
                 animate={{ x: isShifted ? -140 : 0 }}
                 transition={{
-                    type: "spring", stiffness: 400, damping: 28,
-                    // Move instantly on open. Wait for buttons to hide (0.3s) on close.
-                    delay: isShifted ? 0 : 0.3
+                    type: "spring", stiffness: 500, damping: 40,
+                    // Open: Move immediately (0s). Close: Wait for buttons to hide (0.1s).
+                    delay: isShifted ? 0 : 0.1
                 }}
                 onClick={toggleShift}
                 className={cn(
                     "relative w-full h-full glass rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col",
                     statusColor,
-                    isImminent && "animate-pulse-slow"
+                    isImminent && "animate-pulse-slow",
+                    // Remove shadow when shifted to prevent artifact over buttons
+                    isShifted && "shadow-none"
                 )}
                 whileTap={{ scale: 0.98 }}
             >

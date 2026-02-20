@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
-import { getAirportColor, getAirportTimezone } from "@/data/airports";
+import { getAirportColor, getAirportTimezone, AIRPORTS } from "@/data/airports";
 import { getContrastHex } from "@/lib/colors";
 
 interface GlobalPulseProps {
@@ -124,7 +124,10 @@ export default function GlobalPulse({
                                 className="text-lg font-medium tracking-wide"
                                 style={{ color: subTextColor }}
                             >
-                                {persona === "plane" ? faCity.toUpperCase() : partnerCity.toUpperCase()}
+                                {persona === "plane"
+                                    ? (AIRPORTS[faCode]?.countryIso ? `${faCity.toUpperCase()}, ${AIRPORTS[faCode].countryIso}` : faCity.toUpperCase())
+                                    : (AIRPORTS[partnerCode]?.countryIso ? `${partnerCity.toUpperCase()}, ${AIRPORTS[partnerCode].countryIso}` : partnerCity.toUpperCase())
+                                }
                             </span>
                         </div>
 

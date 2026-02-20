@@ -151,27 +151,30 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         initial={{ opacity: 0, y: 100, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                        className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border-t border-x md:border border-white/10 rounded-t-[32px] rounded-b-none md:rounded-[32px] p-5 pb-10 md:p-8 z-[70] shadow-2xl overflow-y-auto max-h-[85vh] md:max-h-[90vh] custom-scrollbar"
+                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border-t border-x md:border border-white/10 rounded-t-[32px] rounded-b-none md:rounded-[32px] z-[70] shadow-2xl overflow-y-auto overflow-x-hidden max-h-[85vh] md:max-h-[90vh] custom-scrollbar"
                     >
                         {/* Decorative background glow */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />
 
-                        <div className="flex items-center justify-between mb-4 md:mb-8">
+                        <div className="sticky top-0 z-20 bg-[#0F0F0F]/95 backdrop-blur-sm flex items-center justify-between px-5 md:px-8 pt-5 pb-4 md:pt-8 md:pb-6">
                             <div className="flex flex-col">
                                 <h2 className="text-xl font-bold text-white tracking-widest uppercase">
-                                    {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "New Horizon")}
+                                    {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "NEW JOURNEY")}
                                 </h2>
-                                <span className="text-[10px] text-white/40 uppercase tracking-wider">
-                                    {isHistoryMode ? "Add to your vault" : "Next adventure awaits"}
-                                </span>
+                                {!flightToEdit && (
+                                    <span className="text-[10px] text-white/40 uppercase tracking-wider">
+                                        {isHistoryMode ? "Add to your vault" : "YOUR NEXT ADVENTURE AWAITS"}
+                                    </span>
+                                )}
                             </div>
                             <button onClick={onClose} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
+                        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8 px-5 pb-10 md:px-8 md:pb-8">
+
 
                             {/* 1. Header: Flight Number */}
                             <div className="flex flex-col items-center justify-center border-b border-white/5 pb-6 md:pb-8">
@@ -183,7 +186,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                         type="text"
                                         inputMode="numeric"
                                         value={flightNum}
-                                        onChange={(e) => setFlightNum(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                                        onChange={(e) => setFlightNum(e.target.value.replace(/\D/g, '').slice(0, 3))}
                                         placeholder="000"
                                         className="bg-transparent border-none text-4xl w-32 font-bold text-white tracking-tighter placeholder:text-white/10 focus:outline-none text-center p-0"
                                         autoFocus

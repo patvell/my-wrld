@@ -99,10 +99,57 @@ export default function Home() {
     return { code: first.origin_code, city: first.origin_city };
   };
 
+  /* 
+   * Helper to check if flight has "Arrived" for the purpose of moving to History tab.
+   * Requirement: Move to history 2 hours AFTER landing.
+   */
   const hasFlightArrived = (flight: Flight) => {
     const destTz = getAirportTimezone(flight.destination_code);
     const nowDest = getWallClock(destTz);
-    return nowDest >= flight.arrival_time;
+
+    // We can't just compare ISO strings directly for "2 hours later" easily without parsing
+    // But since we are using wall clock ISO strings, let's parse them back to Date objects 
+    // strictly for comparison. We treat them as if they are UTC to avoid browser timezone shifts.
+    // Clean string of any Z or offsets to treat as abstract wall clock
+    const cleanIso = flight.arrival_time.replace(/Z$|[+-]\d{2}:?\d{2}$/, '');
+    const arrivalDate = new Date(cleanIso + "Z"); // Treat as UTC
+    const nowDestDate = new Date(nowDest + "Z");
+
+    const twoHoursAfter = new Date(arrivalDate.getTime() + 2 * 60 * 60 * 1000);
+
+    return nowDestDate >= twoHoursAfter;
+  };
+
+  /*
+   * Helper to check if flight is "Active" (Live Tracking Mode).
+   * Requirement: Active from 3 hours BEFORE departure until 2 hours AFTER arrival.
+   * During this time, card has white hue and tapping opens FlightAware.
+   */
+  const getFlightStatus = (flight: Flight) => {
+    const originTz = getAirportTimezone(flight.origin_code);
+    const destTz = getAirportTimezone(flight.destination_code);
+
+    const nowOrigin = getWallClock(originTz);
+    const nowDest = getWallClock(destTz);
+
+    // Clean strings
+    const cleanDep = flight.departure_time.replace(/Z$|[+-]\d{2}:?\d{2}$/, '');
+    const cleanArr = flight.arrival_time.replace(/Z$|[+-]\d{2}:?\d{2}$/, '');
+
+    const depDate = new Date(cleanDep + "Z");
+    const arrDate = new Date(cleanArr + "Z");
+    const nowOriginDate = new Date(nowOrigin + "Z");
+    const nowDestDate = new Date(nowDest + "Z");
+
+    // 3 hours before departure (using Origin time)
+    const threeHoursBeforeDep = new Date(depDate.getTime() - 3 * 60 * 60 * 1000);
+    // 2 hours after arrival (using Destination time)
+    const twoHoursAfterArr = new Date(arrDate.getTime() + 2 * 60 * 60 * 1000);
+
+    const isAfterStart = nowOriginDate >= threeHoursBeforeDep;
+    const isBeforeEnd = nowDestDate <= twoHoursAfterArr;
+
+    return isAfterStart && isBeforeEnd;
   };
 
   const currentLocation = getCurrentLocation();
@@ -233,32 +280,52 @@ export default function Home() {
     setActiveOpenCardId(prev => (prev === id ? null : id));
   };
 
-  // Slide variants for smooth transitions
-  const variants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? "100%" : "-100%",
-      opacity: 0,
-      filter: "blur(4px)",
-    }),
-    center: {
-      zIndex: 1,
-      x: 0,
+  // Staggered container variants for "reshuffling" effect
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
       opacity: 1,
-      filter: "blur(0px)",
+      transition: {
+        staggerChildren: 0.08,
+        delayChildren: 0.02,
+      },
     },
-    exit: (direction: number) => ({
-      zIndex: 0,
-      x: direction < 0 ? "100%" : "-100%",
+    exit: {
       opacity: 0,
-      filter: "blur(4px)",
-    }),
+      transition: {
+        staggerChildren: 0.05,
+        staggerDirection: -1,
+        when: "afterChildren",
+      },
+    },
   };
 
-  // Transition settings
-  const transition = {
-    x: { type: "spring" as const, stiffness: 200, damping: 25 },
-    opacity: { duration: 0.3 },
-    filter: { duration: 0.3 },
+  const cardVariants = {
+    hidden: {
+      y: 20,
+      opacity: 0,
+      scale: 0.95,
+      filter: "blur(4px)"
+    },
+    show: {
+      y: 0,
+      opacity: 1,
+      scale: 1,
+      filter: "blur(0px)",
+      transition: {
+        type: "spring" as const,
+        stiffness: 150,
+        damping: 20,
+        mass: 0.8
+      }
+    },
+    exit: {
+      y: -20,
+      opacity: 0,
+      scale: 0.95,
+      filter: "blur(4px)",
+      transition: { duration: 0.2, ease: "easeIn" as const }
+    },
   };
 
   useEffect(() => {
@@ -266,7 +333,7 @@ export default function Home() {
     document.body.style.backgroundColor = primaryColor;
     document.documentElement.style.backgroundColor = primaryColor;
 
-    // Update theme-color meta tag for mobile browser UI
+    // Update theme-color meta tag for mobile browser UI (Android/Chrome/Safari 15+)
     let metaThemeColor = document.querySelector("meta[name='theme-color']") as HTMLMetaElement | null;
     if (!metaThemeColor) {
       metaThemeColor = document.createElement("meta");
@@ -274,6 +341,9 @@ export default function Home() {
       document.head.appendChild(metaThemeColor);
     }
     metaThemeColor.content = primaryColor;
+
+    // Update status bar style for older iOS devices or PWA mode (though theme-color usually wins on modern iOS)
+    // We can try to force 'black-translucent' or similar if needed, but usually theme-color is enough.
   }, [primaryColor]);
 
   return (
@@ -352,12 +422,11 @@ export default function Home() {
           {activeTab === "home" ? (
             <motion.div
               key="home"
-              custom={direction}
-              variants={variants}
-              initial="enter"
-              animate="center"
+              layout
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
               exit="exit"
-              transition={transition}
               className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[420px] px-4 pb-40 flex flex-col items-center gap-6"
               style={{
                 maskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
@@ -370,14 +439,16 @@ export default function Home() {
                 <>
                   {upcomingFlights
                     .map((flight) => (
-                      <DigitalBoardingPass
-                        key={flight.id}
-                        flight={flight}
-                        onDelete={handleDeleteTrip}
-                        onEdit={handleEditTrip}
-                        isShifted={activeOpenCardId === flight.id}
-                        onToggleShift={() => handleCardToggle(flight.id)}
-                      />
+                      <motion.div key={flight.id} variants={cardVariants} layout className="w-full max-w-sm">
+                        <DigitalBoardingPass
+                          flight={flight}
+                          onDelete={handleDeleteTrip}
+                          onEdit={handleEditTrip}
+                          isShifted={activeOpenCardId === flight.id}
+                          onToggleShift={() => handleCardToggle(flight.id)}
+                          isActive={getFlightStatus(flight)}
+                        />
+                      </motion.div>
                     ))}
 
                   {upcomingFlights.length === 0 && (
@@ -391,12 +462,11 @@ export default function Home() {
           ) : (
             <motion.div
               key="history"
-              custom={direction}
-              variants={variants}
-              initial="enter"
-              animate="center"
+              layout
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
               exit="exit"
-              transition={transition}
               className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-24 px-4 pb-32 flex flex-col items-center gap-6"
               style={{
                 maskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
@@ -409,14 +479,15 @@ export default function Home() {
                 <>
                   {pastFlights
                     .map((flight) => (
-                      <DigitalBoardingPass
-                        key={flight.id}
-                        flight={flight}
-                        onDelete={handleDeleteTrip} // Probably want to allow deleting history too?
-                        onEdit={handleEditTrip}
-                        isShifted={activeOpenCardId === flight.id}
-                        onToggleShift={() => handleCardToggle(flight.id)}
-                      />
+                      <motion.div key={flight.id} variants={cardVariants} layout className="w-full max-w-sm">
+                        <DigitalBoardingPass
+                          flight={flight}
+                          onDelete={handleDeleteTrip} // Probably want to allow deleting history too?
+                          onEdit={handleEditTrip}
+                          isShifted={activeOpenCardId === flight.id}
+                          onToggleShift={() => handleCardToggle(flight.id)}
+                        />
+                      </motion.div>
                     ))}
 
                   {pastFlights.length === 0 && (
