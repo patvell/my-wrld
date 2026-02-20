@@ -261,8 +261,13 @@ export default function Home() {
     filter: { duration: 0.3 },
   };
 
+  useEffect(() => {
+    // Sync body background color for edge/bounce areas
+    document.body.style.backgroundColor = primaryColor;
+  }, [primaryColor]);
+
   return (
-    <main className="h-screen w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col">
+    <main className="h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col">
       {/* Full Screen Background */}
       <LiquidBackground primaryColor={primaryColor} />
 

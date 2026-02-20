@@ -152,12 +152,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
                         transition={{ type: "spring", stiffness: 350, damping: 25 }}
-                        className="fixed inset-x-4 bottom-8 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border border-white/10 rounded-[32px] p-8 z-[70] shadow-2xl overflow-hidden"
+                        className="fixed inset-x-4 bottom-8 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border border-white/10 rounded-[32px] p-6 md:p-8 z-[70] shadow-2xl overflow-hidden"
                     >
                         {/* Decorative background glow */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />
 
-                        <div className="flex items-center justify-between mb-8">
+                        <div className="flex items-center justify-between mb-6 md:mb-8">
                             <div className="flex flex-col">
                                 <h2 className="text-xl font-bold text-white tracking-widest uppercase">
                                     {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "New Horizon")}
@@ -174,11 +174,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         <form onSubmit={handleSubmit} className="space-y-8">
 
                             {/* 1. Header: Flight Number */}
-                            <div className="flex flex-col items-center justify-center border-b border-white/5 pb-8">
-                                <label className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">Flight Number</label>
+                            <div className="flex flex-col items-center justify-center border-b border-white/5 pb-6 md:pb-8">
+                                <label htmlFor="flight-number" className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">Flight Number</label>
                                 <div className="relative flex items-center justify-center">
                                     <span className="text-4xl font-bold text-white/40 tracking-tighter mr-2">EK</span>
                                     <input
+                                        id="flight-number"
                                         type="text"
                                         inputMode="numeric"
                                         value={flightNum}
@@ -192,7 +193,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                             </div>
 
                             {/* 2. Dual Column Layout */}
-                            <div className="grid grid-cols-2 gap-8 relative">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 relative">
                                 {/* Decor: Center Divider */}
                                 <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/5 -translate-x-1/2 hidden md:block" />
 
@@ -200,12 +201,13 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                 <div className="space-y-5">
                                     {/* Airport Code */}
                                     <div className="space-y-2">
-                                        <label className="text-[10px] uppercase tracking-widest text-emirates-red font-bold flex items-center gap-2">
+                                        <label htmlFor="origin-input" className="text-[10px] uppercase tracking-widest text-emirates-red font-bold flex items-center gap-2">
                                             <div className="w-1.5 h-1.5 rounded-full bg-emirates-red" />
                                             Depart From
                                         </label>
                                         <div className="relative group">
                                             <input
+                                                id="origin-input"
                                                 type="text"
                                                 value={origin}
                                                 onChange={(e) => {
@@ -222,10 +224,11 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                     {/* Date */}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
+                                        <label htmlFor="origin-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
                                         <div className="relative">
                                             <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                             <input
+                                                id="origin-date"
                                                 type="date"
                                                 value={originDate}
                                                 min={!isHistoryMode ? today : undefined}
@@ -239,10 +242,11 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                     {/* Time */}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
+                                        <label htmlFor="origin-time" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
                                         <div className="relative">
                                             <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                             <input
+                                                id="origin-time"
                                                 type="text"
                                                 inputMode="numeric"
                                                 maxLength={5}
@@ -261,12 +265,14 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                 <div className="space-y-5">
                                     {/* Airport Code */}
                                     <div className="space-y-2">
-                                        <label className="text-[10px] uppercase tracking-widest text-dubai-gold font-bold flex items-center gap-2 justify-end">
-                                            Arrive At
+                                        <label htmlFor="dest-input" className="text-[10px] uppercase tracking-widest text-dubai-gold font-bold flex items-center gap-2 justify-start md:justify-end">
+                                            <span className="md:hidden">Arrive At</span> {/* Mobile label order */}
                                             <div className="w-1.5 h-1.5 rounded-full bg-dubai-gold" />
+                                            <span className="hidden md:inline">Arrive At</span> {/* Desktop label order */}
                                         </label>
                                         <div className="relative group">
                                             <input
+                                                id="dest-input"
                                                 type="text"
                                                 value={destination}
                                                 onChange={(e) => {
@@ -283,15 +289,16 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                     {/* Date */}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold mr-1 text-right block">Date</label>
+                                        <label htmlFor="dest-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:mr-1 text-left md:text-right block">Date</label>
                                         <div className="relative">
-                                            <Calendar size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+                                            <Calendar size={16} className="absolute left-4 md:right-4 md:left-auto top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                             <input
+                                                id="dest-date"
                                                 type="date"
                                                 value={destDate}
                                                 min={originDate}
                                                 onChange={(e) => setDestDate(e.target.value)}
-                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pr-12 pl-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all [color-scheme:dark] text-right [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
+                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 md:pl-4 md:pr-12 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all [color-scheme:dark] text-left md:text-right [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
                                                 required
                                             />
                                         </div>
@@ -299,17 +306,18 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                     {/* Time */}
                                     <div className="space-y-1">
-                                        <label className="text-[10px] uppercase tracking-wider text-white/30 font-bold mr-1 text-right block">Time</label>
+                                        <label htmlFor="dest-time" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:mr-1 text-left md:text-right block">Time</label>
                                         <div className="relative">
-                                            <Clock size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
+                                            <Clock size={16} className="absolute left-4 md:right-4 md:left-auto top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                             <input
+                                                id="dest-time"
                                                 type="text"
                                                 inputMode="numeric"
                                                 maxLength={5}
                                                 placeholder="00:00"
                                                 value={destTime}
                                                 onChange={(e) => handleTimeChange(e.target.value, setDestTime)}
-                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pr-12 pl-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all placeholder:text-white/10 text-right"
+                                                className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 md:pl-4 md:pr-12 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all placeholder:text-white/10 text-left md:text-right"
                                                 required
                                             />
                                         </div>
