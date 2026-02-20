@@ -293,9 +293,8 @@ export default function Home() {
     exit: {
       opacity: 0,
       transition: {
-        staggerChildren: 0.05,
-        staggerDirection: -1,
-        when: "afterChildren",
+        duration: 0.2,
+        ease: "easeInOut" as const
       },
     },
   };
@@ -324,7 +323,7 @@ export default function Home() {
       opacity: 0,
       scale: 0.95,
       filter: "blur(4px)",
-      transition: { duration: 0.2, ease: "easeIn" as const }
+      transition: { duration: 0.15, ease: "easeIn" as const }
     },
   };
 
@@ -416,9 +415,8 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Main Content Area - Scrollable */}
       <div className="flex-1 w-full max-w-full relative overflow-hidden">
-        <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+        <AnimatePresence mode="wait" initial={false} custom={direction}>
           {activeTab === "home" ? (
             <motion.div
               key="home"
