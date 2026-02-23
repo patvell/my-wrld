@@ -191,10 +191,26 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     {/* CENTER: Flight Info (Dead Center) */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-0 pointer-events-none">
                         <div className="flex flex-col items-center justify-center">
+                            {/* LIVE Indicator */}
+                            <AnimatePresence>
+                                {isActive && (
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.8 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        exit={{ opacity: 0, scale: 0.8 }}
+                                        className="flex items-center gap-1.5 mb-1"
+                                    >
+                                        <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] animate-pulse" />
+                                        <span className="text-[10px] font-black tracking-[0.2em] text-white uppercase drop-shadow-sm">Live</span>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+
                             <div className="flex items-center gap-1.5 mb-2">
                                 <Plane size={14} className="text-white fill-white rotate-45" />
                                 <span className="text-lg font-black text-white tracking-tight">EK{flightNumber}</span>
                             </div>
+
                             {/* Animated Line */}
                             <div className="w-24 h-[1px] bg-white/10 overflow-hidden relative">
                                 <motion.div
