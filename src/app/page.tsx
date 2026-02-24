@@ -6,6 +6,7 @@ import DigitalBoardingPass from "@/components/DigitalBoardingPass";
 import PillMenu from "@/components/PillMenu";
 import AddTripModal from "@/components/AddTripModal";
 import LiquidBackground from "@/components/LiquidBackground";
+import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import { Flight, PersonaMode } from "@/types";
 import { getAirportColor, getAirportTimezone } from "@/data/airports";
 import { supabase } from "@/lib/supabaseClient";
@@ -27,10 +28,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
-  const [currentPersona, setCurrentPersona] = useState<PersonaMode>("home");
+  const [currentPersona, setCurrentPersona] = useState<PersonaMode>("plane");
   const [historySortAsc, setHistorySortAsc] = useState(false); // Default false = Newest (most recent) to Oldest
   const [activeOpenCardId, setActiveOpenCardId] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
+  const [isReady, setIsReady] = useState(false);
 
   // Update 'now' every minute to ensure location status (in-air vs landed) stays accurate
   React.useEffect(() => {
@@ -154,8 +156,9 @@ export default function Home() {
   };
 
   const currentLocation = getCurrentLocation();
+  // While loading, we use a neutral dark charcoal to avoid any color flashes (red, etc.)
   const currentLocationCode = currentPersona === "home" ? "YUL" : currentLocation.code;
-  const primaryColor = getAirportColor(currentLocationCode);
+  const primaryColor = loading ? "#0a0a0a" : getAirportColor(currentLocationCode);
 
   const upcomingFlights = flights
     .filter(f => !hasFlightArrived(f))
@@ -196,9 +199,19 @@ export default function Home() {
       console.error('Error fetching flights:', error);
       // In case of error (e.g. no connection), maybe show empty or local backup
     } finally {
+      // Data is fetched, but we don't set loading to false yet
+      // We wait for the next render cycle where primaryColor will be calculated
       setLoading(false);
     }
   };
+
+  // Stage 2: Once loading is false and primaryColor is determined, wait a tiny bit then reveal
+  useEffect(() => {
+    if (!loading) {
+      const timer = setTimeout(() => setIsReady(true), 100);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
 
   const handleTabChange = (newTab: "home" | "history" | "settings") => {
     if (newTab === activeTab) return;
@@ -333,7 +346,12 @@ export default function Home() {
 
 
   return (
-    <main className="h-[100dvh] min-h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col">
+    <motion.main
+      initial={{ opacity: 0 }}
+      animate={{ opacity: isReady ? 1 : 0 }}
+      transition={{ duration: 1.5, ease: "easeInOut" }}
+      className="h-[100dvh] min-h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col"
+    >
       {/* Full Screen Background */}
       <LiquidBackground primaryColor={primaryColor} />
 
@@ -355,6 +373,7 @@ export default function Home() {
                 partnerCode="YUL"
                 persona={currentPersona}
                 onTogglePersona={() => setCurrentPersona(prev => prev === "home" ? "plane" : "home")}
+                isLoading={loading}
               />
             </div>
           </motion.div>
@@ -419,7 +438,13 @@ export default function Home() {
               }}
             >
               {loading ? (
-                <div className="mt-12 text-center text-white/20">Loading...</div>
+                <div className="flex flex-col gap-6 w-full items-center">
+                  {[1, 2, 3].map((i) => (
+                    <motion.div key={i} variants={cardVariants} className="w-full max-w-sm">
+                      <BoardingPassSkeleton />
+                    </motion.div>
+                  ))}
+                </div>
               ) : (
                 <>
                   {upcomingFlights
@@ -459,7 +484,13 @@ export default function Home() {
               }}
             >
               {loading ? (
-                <div className="mt-20 text-center text-white/20">Loading...</div>
+                <div className="flex flex-col gap-6 w-full items-center">
+                  {[1, 2, 3].map((i) => (
+                    <motion.div key={i} variants={cardVariants} className="w-full max-w-sm">
+                      <BoardingPassSkeleton />
+                    </motion.div>
+                  ))}
+                </div>
               ) : (
                 <>
                   {pastFlights
@@ -513,6 +544,6 @@ export default function Home() {
         isHistoryMode={activeTab === "history"}
         flightToEdit={flights.find(f => f.id === editingFlightId) || null}
       />
-    </main>
+    </motion.main>
   );
 }

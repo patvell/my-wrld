@@ -12,6 +12,7 @@ interface GlobalPulseProps {
     faCode?: string;
     persona: PersonaMode;
     onTogglePersona: () => void;
+    isLoading?: boolean;
 }
 
 export default function GlobalPulse({
@@ -21,6 +22,7 @@ export default function GlobalPulse({
     faCode = "DXB",
     persona,
     onTogglePersona,
+    isLoading = false,
 }: GlobalPulseProps) {
     const [mounted, setMounted] = useState(false);
     const [now, setNow] = useState<Date | null>(null);
@@ -108,27 +110,40 @@ export default function GlobalPulse({
                                 className="text-[10px] font-bold tracking-[0.2em] uppercase"
                                 style={{ color: iconColor }}
                             >
-                                {persona === "plane" ? "CURRENTLY EXPLORING" : "AT HOME"}
+                                {isLoading ? (
+                                    <div className="h-[10px] w-24 bg-white/10 rounded animate-shimmer" />
+                                ) : (
+                                    persona === "plane" ? "CURRENTLY EXPLORING" : "AT HOME"
+                                )}
                             </span>
                         </div>
 
                         {/* Location */}
                         <div className="flex items-baseline gap-3 mb-1">
-                            <span
-                                className="text-2xl font-bold tracking-tight"
-                                style={{ color: textColor }}
-                            >
-                                {persona === "plane" ? faCode : partnerCode}
-                            </span>
-                            <span
-                                className="text-lg font-medium tracking-wide"
-                                style={{ color: subTextColor }}
-                            >
-                                {persona === "plane"
-                                    ? (AIRPORTS[faCode]?.countryIso ? `${faCity.toUpperCase()}, ${AIRPORTS[faCode].countryIso}` : faCity.toUpperCase())
-                                    : (AIRPORTS[partnerCode]?.countryIso ? `${partnerCity.toUpperCase()}, ${AIRPORTS[partnerCode].countryIso}` : partnerCity.toUpperCase())
-                                }
-                            </span>
+                            {isLoading ? (
+                                <>
+                                    <div className="h-8 w-16 bg-white/10 rounded animate-shimmer" />
+                                    <div className="h-4 w-32 bg-white/5 rounded animate-shimmer" />
+                                </>
+                            ) : (
+                                <>
+                                    <span
+                                        className="text-2xl font-bold tracking-tight"
+                                        style={{ color: textColor }}
+                                    >
+                                        {persona === "plane" ? faCode : partnerCode}
+                                    </span>
+                                    <span
+                                        className="text-lg font-medium tracking-wide"
+                                        style={{ color: subTextColor }}
+                                    >
+                                        {persona === "plane"
+                                            ? (AIRPORTS[faCode]?.countryIso ? `${faCity.toUpperCase()}, ${AIRPORTS[faCode].countryIso}` : faCity.toUpperCase())
+                                            : (AIRPORTS[partnerCode]?.countryIso ? `${partnerCity.toUpperCase()}, ${AIRPORTS[partnerCode].countryIso}` : partnerCity.toUpperCase())
+                                        }
+                                    </span>
+                                </>
+                            )}
                         </div>
 
 
@@ -154,6 +169,14 @@ export default function GlobalPulse({
 
             {/* Secondary Clock (Toggle Trigger) */}
             <motion.div
+                animate={{
+                    scale: [1, 1.03, 1],
+                }}
+                transition={{
+                    duration: 5,
+                    repeat: Infinity,
+                    ease: "easeInOut",
+                }}
                 whileTap={{ scale: 0.95 }}
                 onClick={togglePersona}
                 className="cursor-pointer group relative overflow-hidden rounded-full glass border border-white/10 px-6 py-3 flex items-center gap-4 transition-all hover:bg-white/10 pointer-events-auto"
