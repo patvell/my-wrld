@@ -110,7 +110,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     };
 
     return (
-        <div className="relative w-full max-w-sm group h-36">
+        <div className="relative w-full max-w-sm group h-40">
             {/* Action Buttons Layer (Behind) */}
             <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-2 z-0">
                 <motion.button
@@ -177,10 +177,10 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 <div className="flex-1 p-6 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
 
                     {/* LEFT: Origin */}
-                    <div className="flex flex-col items-start gap-3 z-10 w-1/3">
+                    <div className="flex flex-col items-start justify-between h-full z-10 w-1/3 py-1">
                         <div>
                             <span className="text-4xl font-black tracking-tighter text-white drop-shadow-xl block leading-none">{flight.origin_code}</span>
-                            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-bold block mt-1 truncate w-full" title={flight.origin_city}>{flight.origin_city}</span>
+                            <span className="text-[10px] text-white/50 uppercase tracking-[0.15em] font-bold block mt-1 leading-tight break-words">{flight.origin_city}</span>
                         </div>
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatDate(flight.departure_time)}</span>
@@ -223,10 +223,10 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     </div>
 
                     {/* RIGHT: Destination */}
-                    <div className="flex flex-col items-end gap-3 z-10 w-1/3 text-right">
+                    <div className="flex flex-col items-end justify-between h-full z-10 w-1/3 text-right py-1">
                         <div>
                             <span className="text-4xl font-black tracking-tighter text-white drop-shadow-xl block leading-none">{flight.destination_code}</span>
-                            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-bold block mt-1 truncate w-full" title={flight.destination_city}>{flight.destination_city}</span>
+                            <span className="text-[10px] text-white/50 uppercase tracking-[0.15em] font-bold block mt-1 leading-tight break-words">{flight.destination_city}</span>
                         </div>
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatDate(flight.arrival_time)}</span>
