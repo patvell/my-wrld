@@ -110,7 +110,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     };
 
     return (
-        <div className="relative w-full max-w-sm group h-40">
+        <div className="relative w-full max-w-sm group h-44">
             {/* Action Buttons Layer (Behind) */}
             <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-2 z-0">
                 <motion.button
@@ -174,7 +174,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 whileTap={{ scale: 0.98 }}
             >
                 {/* Content */}
-                <div className="flex-1 p-6 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
+                <div className="flex-1 p-5 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
 
                     {/* LEFT: Origin */}
                     <div className="flex flex-col items-start justify-between h-full z-10 w-1/3 py-1">

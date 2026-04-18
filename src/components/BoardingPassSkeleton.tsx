@@ -3,9 +3,9 @@ import { motion } from "framer-motion";
 
 export default function BoardingPassSkeleton() {
     return (
-        <div className="relative w-full max-w-sm h-40">
+        <div className="relative w-full max-w-sm h-44">
             <div className="relative w-full h-full glass rounded-3xl overflow-hidden border border-white/5 flex flex-col">
-                <div className="flex-1 p-6 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
+                <div className="flex-1 p-5 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
 
                     {/* LEFT: Origin Skeleton */}
                     <div className="flex flex-col items-start justify-between h-full z-10 w-1/3 py-1">
