@@ -180,7 +180,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     <div className="flex flex-col items-start gap-3 z-10 w-1/3">
                         <div>
                             <span className="text-4xl font-black tracking-tighter text-white drop-shadow-xl block leading-none">{flight.origin_code}</span>
-                            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-bold block mt-1">{flight.origin_city}</span>
+                            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-bold block mt-1 truncate w-full" title={flight.origin_city}>{flight.origin_city}</span>
                         </div>
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatDate(flight.departure_time)}</span>
@@ -226,7 +226,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     <div className="flex flex-col items-end gap-3 z-10 w-1/3 text-right">
                         <div>
                             <span className="text-4xl font-black tracking-tighter text-white drop-shadow-xl block leading-none">{flight.destination_code}</span>
-                            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-bold block mt-1">{flight.destination_city}</span>
+                            <span className="text-[10px] text-white/50 uppercase tracking-[0.2em] font-bold block mt-1 truncate w-full" title={flight.destination_city}>{flight.destination_city}</span>
                         </div>
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatDate(flight.arrival_time)}</span>
