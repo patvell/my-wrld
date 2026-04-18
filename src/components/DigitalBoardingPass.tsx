@@ -46,10 +46,12 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     // Determine status and style
     const now = new Date();
     const departure = new Date(flight.departure_time);
+    const arrival = new Date(flight.arrival_time);
     const timeDiff = departure.getTime() - now.getTime();
     const hoursUntil = timeDiff / (1000 * 60 * 60);
 
     const isImminent = hoursUntil < 24 && hoursUntil > 0;
+    const isPast = arrival.getTime() < now.getTime();
 
     // Live Active State - White Hue
     const internalStatusColor = isActive
@@ -211,13 +213,17 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                 <span className="text-lg font-black text-white tracking-tight">EK{flightNumber}</span>
                             </div>
 
-                            {/* Animated Line */}
+                            {/* Animated / Solid Line */}
                             <div className="w-24 h-[1px] bg-white/10 overflow-hidden relative">
-                                <motion.div
-                                    className="absolute inset-y-0 left-0 w-1/3 bg-white/60 blur-[1px]"
-                                    animate={{ x: ["-100%", "300%"] }}
-                                    transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
-                                />
+                                {!isPast ? (
+                                    <motion.div
+                                        className="absolute inset-y-0 left-0 w-1/3 bg-white/60 blur-[1px]"
+                                        animate={{ x: ["-100%", "300%"] }}
+                                        transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
+                                    />
+                                ) : (
+                                    <div className="absolute inset-y-0 left-0 w-full bg-white/20" />
+                                )}
                             </div>
                         </div>
                     </div>

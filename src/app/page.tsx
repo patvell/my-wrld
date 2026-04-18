@@ -9,11 +9,12 @@ import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import { Flight, PersonaMode } from "@/types";
 import { getAirportColor, getAirportTimezone } from "@/data/airports";
+import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { History, ArrowUpDown } from "lucide-react";
+import { History, ArrowUpDown, Undo2, Moon } from "lucide-react";
 import { useThemeColor } from "@/hooks/useThemeColor";
 
 function cn(...inputs: ClassValue[]) {
@@ -160,17 +161,11 @@ export default function Home() {
   const currentLocationCode = currentPersona === "home" ? "YUL" : currentLocation.code;
   const primaryColor = loading ? "#0a0a0a" : getAirportColor(currentLocationCode);
 
-  const upcomingFlights = flights
-    .filter(f => !hasFlightArrived(f))
-    .sort((a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime());
+  const upcomingFlights = flights.filter(f => !hasFlightArrived(f));
+  const upcomingJourneys = groupFlightsIntoJourneys(upcomingFlights, true);
 
-  const pastFlights = flights
-    .filter(f => hasFlightArrived(f))
-    .sort((a, b) => {
-      const tA = new Date(a.departure_time).getTime();
-      const tB = new Date(b.departure_time).getTime();
-      return historySortAsc ? tA - tB : tB - tA;
-    });
+  const pastFlights = flights.filter(f => hasFlightArrived(f));
+  const pastJourneys = groupFlightsIntoJourneys(pastFlights, historySortAsc);
 
   useEffect(() => {
     fetchFlights();
@@ -447,21 +442,54 @@ export default function Home() {
                 </div>
               ) : (
                 <>
-                  {upcomingFlights
-                    .map((flight) => (
-                      <motion.div key={flight.id} variants={cardVariants} layout className="w-full max-w-sm">
-                        <DigitalBoardingPass
-                          flight={flight}
-                          onDelete={handleDeleteTrip}
-                          onEdit={handleEditTrip}
-                          isShifted={activeOpenCardId === flight.id}
-                          onToggleShift={() => handleCardToggle(flight.id)}
-                          isActive={getFlightStatus(flight)}
-                        />
-                      </motion.div>
+                  {upcomingJourneys
+                    .map((journey, jIdx) => (
+                      <div key={`upcoming-journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
+                        {journey.map((flight, fIdx) => {
+                          const nextFlight = journey[fIdx + 1];
+                          let isLayover = false;
+                          if (nextFlight) {
+                            const t1 = new Date(flight.departure_time).getTime();
+                            const t2 = new Date(nextFlight.departure_time).getTime();
+                            const firstFlight = t1 < t2 ? flight : nextFlight;
+                            const secondFlight = t1 < t2 ? nextFlight : flight;
+                            isLayover = (new Date(secondFlight.departure_time).getTime() - new Date(firstFlight.arrival_time).getTime()) / 3600000 > 12;
+                          }
+
+                          return (
+                            <React.Fragment key={flight.id}>
+                              <motion.div variants={cardVariants} layout className="w-full relative z-20">
+                                <DigitalBoardingPass
+                                  flight={flight}
+                                  onDelete={handleDeleteTrip}
+                                  onEdit={handleEditTrip}
+                                  isShifted={activeOpenCardId === flight.id}
+                                  onToggleShift={() => handleCardToggle(flight.id)}
+                                  isActive={getFlightStatus(flight)}
+                                />
+                              </motion.div>
+                              
+                              {fIdx < journey.length - 1 && (
+                                <motion.div 
+                                  variants={cardVariants}
+                                  className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
+                                >
+                                  <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
+                                    {isLayover ? (
+                                      <Moon size={12} className="fill-white/20" />
+                                    ) : (
+                                      <Undo2 size={12} strokeWidth={3} />
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
                     ))}
 
-                  {upcomingFlights.length === 0 && (
+                  {upcomingJourneys.length === 0 && (
                     <div className="mt-12 text-center">
                       <p className="text-white/20 text-xs italic tracking-wide">No scheduled horizons yet.</p>
                     </div>
@@ -493,20 +521,53 @@ export default function Home() {
                 </div>
               ) : (
                 <>
-                  {pastFlights
-                    .map((flight) => (
-                      <motion.div key={flight.id} variants={cardVariants} layout className="w-full max-w-sm">
-                        <DigitalBoardingPass
-                          flight={flight}
-                          onDelete={handleDeleteTrip} // Probably want to allow deleting history too?
-                          onEdit={handleEditTrip}
-                          isShifted={activeOpenCardId === flight.id}
-                          onToggleShift={() => handleCardToggle(flight.id)}
-                        />
-                      </motion.div>
+                  {pastJourneys
+                    .map((journey, jIdx) => (
+                      <div key={`journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
+                        {journey.map((flight, fIdx) => {
+                          const nextFlight = journey[fIdx + 1];
+                          let isLayover = false;
+                          if (nextFlight) {
+                            const t1 = new Date(flight.departure_time).getTime();
+                            const t2 = new Date(nextFlight.departure_time).getTime();
+                            const firstFlight = t1 < t2 ? flight : nextFlight;
+                            const secondFlight = t1 < t2 ? nextFlight : flight;
+                            isLayover = (new Date(secondFlight.departure_time).getTime() - new Date(firstFlight.arrival_time).getTime()) / 3600000 > 12;
+                          }
+
+                          return (
+                            <React.Fragment key={flight.id}>
+                              <motion.div variants={cardVariants} layout className="w-full relative z-20">
+                                <DigitalBoardingPass
+                                  flight={flight}
+                                  onDelete={handleDeleteTrip} // Probably want to allow deleting history too?
+                                  onEdit={handleEditTrip}
+                                  isShifted={activeOpenCardId === flight.id}
+                                  onToggleShift={() => handleCardToggle(flight.id)}
+                                />
+                              </motion.div>
+                              
+                              {fIdx < journey.length - 1 && (
+                                <motion.div 
+                                  variants={cardVariants}
+                                  className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
+                                >
+                                  <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
+                                    {isLayover ? (
+                                      <Moon size={12} className="fill-white/20" />
+                                    ) : (
+                                      <Undo2 size={12} strokeWidth={3} />
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
                     ))}
 
-                  {pastFlights.length === 0 && (
+                  {pastJourneys.length === 0 && (
                     <div className="mt-20 flex flex-col items-center text-center">
                       <div className="w-24 h-24 rounded-full border border-white/5 flex items-center justify-center mb-6 bg-white/5">
                         <History className="text-white opacity-50 w-10 h-10" />
