@@ -191,7 +191,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
 
       {/* Legend */}
       <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 flex items-center gap-5 pointer-events-none">
-        <LegendItem label="Past flights" solid />
+        <LegendItem label="Past" solid />
         <LegendItem label="Upcoming" solid={false} />
       </div>
     </div>

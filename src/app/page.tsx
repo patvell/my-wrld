@@ -592,7 +592,7 @@ export default function Home() {
       </div>
 
       {/* Bottom Menu - Fixed */}
-      <div className="fixed bottom-8 left-0 right-0 z-50 flex justify-center pointer-events-none">
+      <div className="fixed bottom-[calc(2rem+env(safe-area-inset-bottom))] left-0 right-0 z-50 flex justify-center pointer-events-none pb-[env(safe-area-inset-bottom)]">
         <div className="pointer-events-auto">
           <PillMenu
             activeTab={activeTab === "settings" ? "home" : activeTab}

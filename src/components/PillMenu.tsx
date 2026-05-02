@@ -25,7 +25,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryCo
     ] as const;
 
     return (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
+        <div className="z-50">
             <div className="glass-dark rounded-full p-2 flex items-center gap-1 shadow-2xl border-white/5">
                 {tabs.map((tab) => (
                     <button
