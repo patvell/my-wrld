@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import db from '@/lib/db';
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     // Dynamically build the update query based on provided fields
@@ -30,9 +30,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const deleteFlight = db.prepare('DELETE FROM flights WHERE id = ?');
     const result = deleteFlight.run(id);
 
