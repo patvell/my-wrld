@@ -133,7 +133,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   return (
     <div className="relative w-full h-full flex flex-col">
       {/* Stat bar */}
-      <div className="absolute top-6 left-0 right-0 z-10 flex justify-center pointer-events-none">
+      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-4 pointer-events-none">
         <div
           className="flex items-center gap-4 px-5 py-2 rounded-full"
           style={{
@@ -151,6 +151,12 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
               <StatPill value={upcomingCount} label="Upcoming" dim />
             </>
           )}
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center gap-5 opacity-70">
+          <LegendItem label="Past" solid />
+          <LegendItem label="Upcoming" solid={false} />
         </div>
       </div>
 
@@ -187,12 +193,6 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           pointAltitude={0.005}
           pointsMerge={false}
         />
-      </div>
-
-      {/* Legend */}
-      <div className="absolute bottom-28 left-1/2 -translate-x-1/2 z-10 flex items-center gap-5 pointer-events-none">
-        <LegendItem label="Past" solid />
-        <LegendItem label="Upcoming" solid={false} />
       </div>
     </div>
   );
