@@ -5,12 +5,12 @@ import GlobalPulse from "@/components/GlobalPulse";
 import DigitalBoardingPass from "@/components/DigitalBoardingPass";
 import PillMenu from "@/components/PillMenu";
 import AddTripModal from "@/components/AddTripModal";
+import WorldGlobe from "@/components/WorldGlobe";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import { Flight, PersonaMode } from "@/types";
 import { getAirportColor, getAirportTimezone } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
-import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -24,7 +24,7 @@ function cn(...inputs: ClassValue[]) {
 
 
 export default function Home() {
-  const [[activeTab, direction], setActiveTab] = useState<["home" | "history" | "settings", number]>(["home", 0]);
+  const [[activeTab, direction], setActiveTab] = useState<["home" | "history" | "settings" | "world", number]>(["home", 0]);
   const [flights, setFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -173,12 +173,9 @@ export default function Home() {
 
   const fetchFlights = async () => {
     try {
-      const { data, error } = await supabase
-        .from('flights')
-        .select('*')
-        .order('departure_time', { ascending: true });
-
-      if (error) throw error;
+      const res = await fetch('/api/flights');
+      if (!res.ok) throw new Error('Failed to fetch flights');
+      const data = await res.json();
 
       if (data && data.length > 0) {
         // Ensure status is typed correctly if needed, though usually string matches
@@ -208,10 +205,10 @@ export default function Home() {
     }
   }, [loading]);
 
-  const handleTabChange = (newTab: "home" | "history" | "settings") => {
+  const handleTabChange = (newTab: "home" | "history" | "settings" | "world") => {
     if (newTab === activeTab) return;
-    const currentIdx = activeTab === "history" ? 1 : 0;
-    const newIdx = newTab === "history" ? 1 : 0;
+    const currentIdx = activeTab === "world" ? 0 : activeTab === "home" ? 1 : 2;
+    const newIdx = newTab === "world" ? 0 : newTab === "home" ? 1 : 2;
     const newDir = newIdx > currentIdx ? 1 : -1;
     setActiveTab([newTab, newDir]);
   };
@@ -220,12 +217,13 @@ export default function Home() {
     if (editingFlightId) {
       // Update existing flight
       try {
-        const { error } = await supabase
-          .from('flights')
-          .update(tripData)
-          .eq('id', editingFlightId);
+        const res = await fetch(`/api/flights/${editingFlightId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tripData),
+        });
 
-        if (error) throw error;
+        if (!res.ok) throw new Error('Failed to update flight');
 
         setFlights((prev) => prev.map(f =>
           f.id === editingFlightId ? { ...f, ...tripData } : f
@@ -238,20 +236,19 @@ export default function Home() {
     } else {
       // Create new flight
       try {
-        // Remove ID to let DB generate it, or generate one here if we want optimistic UI
-        // Supabase returns the created object
         const newFlightData = {
           ...tripData,
           // user_id: ... // if auth is implemented
         };
 
-        const { data, error } = await supabase
-          .from('flights')
-          .insert([newFlightData])
-          .select()
-          .single();
+        const res = await fetch('/api/flights', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newFlightData),
+        });
 
-        if (error) throw error;
+        if (!res.ok) throw new Error('Failed to create flight');
+        const data = await res.json();
 
         if (data) {
           setFlights((prev) => [...prev, data as Flight]);
@@ -266,12 +263,11 @@ export default function Home() {
 
   const handleDeleteTrip = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('flights')
-        .delete()
-        .eq('id', id);
+      const res = await fetch(`/api/flights/${id}`, {
+        method: 'DELETE',
+      });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error('Failed to delete flight');
 
       setFlights((prev) => prev.filter((f) => f.id !== id));
     } catch (error) {
@@ -352,7 +348,7 @@ export default function Home() {
 
       {/* Top Navigation / Clocks - Only visible on Home/Settings */}
       <AnimatePresence>
-        {activeTab !== "history" && (
+        {activeTab !== "history" && activeTab !== "world" && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -418,7 +414,20 @@ export default function Home() {
 
       <div className="flex-1 w-full max-w-full relative overflow-hidden">
         <AnimatePresence mode="wait" initial={false} custom={direction}>
-          {activeTab === "home" ? (
+          {activeTab === "world" ? (
+            <motion.div
+              key="world"
+              layout
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="absolute inset-0 w-full h-full flex flex-col"
+            >
+               {/* Globe will go here */}
+               <WorldGlobe flights={flights} primaryColor={primaryColor} />
+            </motion.div>
+          ) : activeTab === "home" ? (
             <motion.div
               key="home"
               layout

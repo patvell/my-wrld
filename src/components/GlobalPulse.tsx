@@ -80,6 +80,18 @@ export default function GlobalPulse({
         }).format(now).toUpperCase();
     };
 
+    const getTimeDiffText = (tzPlane: string, tzHome: string) => {
+        if (!now) return "";
+        const dtPlane = new Date(now.toLocaleString("en-US", { timeZone: tzPlane }));
+        const dtHome = new Date(now.toLocaleString("en-US", { timeZone: tzHome }));
+        const diffMs = dtPlane.getTime() - dtHome.getTime();
+        const diffHours = diffMs / (1000 * 60 * 60);
+        
+        if (diffHours === 0) return "SAME TIME";
+        const sign = diffHours > 0 ? "+" : "";
+        return `${sign}${diffHours}HR`;
+    };
+
     const togglePersona = () => {
         onTogglePersona();
     };
@@ -157,10 +169,16 @@ export default function GlobalPulse({
 
                         {/* Date */}
                         <span
-                            className="text-xs font-bold uppercase tracking-widest mt-4"
+                            className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
                             style={{ color: subTextColor }}
                         >
-                            {mounted ? (persona === "plane" ? formatDate(faTimezone) : formatDate(partnerTimezone)) : "..."}
+                            {mounted ? (
+                                <>
+                                    {persona === "plane" ? formatDate(faTimezone) : formatDate(partnerTimezone)}
+                                    <span className="opacity-50">•</span>
+                                    <span>{getTimeDiffText(faTimezone, partnerTimezone)}</span>
+                                </>
+                            ) : "..."}
                         </span>
 
                     </motion.div>

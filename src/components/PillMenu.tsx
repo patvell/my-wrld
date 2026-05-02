@@ -2,7 +2,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Map, History, Plus } from "lucide-react";
+import { Map, History, Plus, Compass, Globe } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -11,15 +11,16 @@ function cn(...inputs: ClassValue[]) {
 }
 
 interface PillMenuProps {
-    activeTab: "home" | "history" | "settings";
-    onTabChange: (tab: "home" | "history" | "settings") => void;
+    activeTab: "home" | "history" | "settings" | "world";
+    onTabChange: (tab: "home" | "history" | "settings" | "world") => void;
     onAddClick: () => void;
     primaryColor: string;
 }
 
 export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryColor }: PillMenuProps) {
     const tabs = [
-        { id: "home", icon: Map, label: "Journey" },
+        { id: "world", icon: Globe, label: "World" },
+        { id: "home", icon: Compass, label: "Journey" },
         { id: "history", icon: History, label: "History" },
     ] as const;
 
@@ -29,7 +30,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryCo
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
-                        onClick={() => onTabChange(tab.id as "home" | "history")}
+                        onClick={() => onTabChange(tab.id as "home" | "history" | "world")}
                         className={cn(
                             "relative px-6 py-3 rounded-full transition-all duration-300 flex items-center gap-2",
                             activeTab === tab.id ? "text-white" : "text-white/40 hover:text-white/60"
