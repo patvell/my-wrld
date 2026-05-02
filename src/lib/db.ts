@@ -99,4 +99,3 @@ export async function getDb() {
   return db;
 }
 
-export default db;
