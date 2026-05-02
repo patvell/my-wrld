@@ -26,13 +26,13 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryCo
 
     return (
         <div className="z-50">
-            <div className="glass-dark rounded-full p-2 flex items-center gap-1 shadow-2xl border-white/5">
+            <div className="glass-dark rounded-full p-1.5 flex items-center gap-0.5 shadow-2xl border-white/5">
                 {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => onTabChange(tab.id as "home" | "history" | "world")}
                         className={cn(
-                            "relative px-6 py-3 rounded-full transition-all duration-300 flex items-center gap-2",
+                            "relative px-3 py-2.5 rounded-full transition-all duration-300 flex items-center gap-1.5",
                             activeTab === tab.id ? "text-white" : "text-white/40 hover:text-white/60"
                         )}
                     >
@@ -43,20 +43,20 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryCo
                                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
                             />
                         )}
-                        <tab.icon size={18} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-                        <span className="text-[10px] font-bold tracking-widest uppercase">{tab.label}</span>
+                        <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
+                        <span className="text-[9px] font-bold tracking-wider uppercase">{tab.label}</span>
                     </button>
                 ))}
 
-                <div className="w-[1px] h-6 bg-white/10 mx-2" />
+                <div className="w-[1px] h-5 bg-white/10 mx-1" />
 
                 <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={onAddClick}
-                    className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110 transition-colors duration-[3000ms]"
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110 transition-colors duration-[3000ms]"
                     style={{ backgroundColor: primaryColor }}
                 >
-                    <Plus size={24} />
+                    <Plus size={20} />
                 </motion.button>
             </div>
         </div>
