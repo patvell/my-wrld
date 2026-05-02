@@ -80,12 +80,16 @@ export default function GlobalPulse({
         }).format(now).toUpperCase();
     };
 
-    const getTimeDiffText = (tzPlane: string, tzHome: string) => {
+    const getTimeDiffText = (tzBig: string, tzSmall: string) => {
         if (!now) return "";
-        const dtPlane = new Date(now.toLocaleString("en-US", { timeZone: tzPlane }));
-        const dtHome = new Date(now.toLocaleString("en-US", { timeZone: tzHome }));
-        const diffMs = dtPlane.getTime() - dtHome.getTime();
-        const diffHours = diffMs / (1000 * 60 * 60);
+        // Use a fixed date to calculate offset to avoid DST edge cases during the transition itself
+        // but for a simple live clock, this approach is usually acceptable
+        const dtBig = new Date(now.toLocaleString("en-US", { timeZone: tzBig }));
+        const dtSmall = new Date(now.toLocaleString("en-US", { timeZone: tzSmall }));
+        
+        // We round to handle half-hour timezones (like India +5:30)
+        const diffMs = dtBig.getTime() - dtSmall.getTime();
+        const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 2) / 2;
         
         if (diffHours === 0) return "SAME TIME";
         const sign = diffHours > 0 ? "+" : "";
@@ -95,6 +99,10 @@ export default function GlobalPulse({
     const togglePersona = () => {
         onTogglePersona();
     };
+
+    // Determine big and small timezones for the difference calculation
+    const bigTz = persona === "plane" ? faTimezone : partnerTimezone;
+    const smallTz = persona === "plane" ? partnerTimezone : faTimezone;
 
     return (
         <div className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 transition-colors duration-1000 overflow-hidden pointer-events-none">
@@ -176,7 +184,7 @@ export default function GlobalPulse({
                                 <>
                                     {persona === "plane" ? formatDate(faTimezone) : formatDate(partnerTimezone)}
                                     <span className="opacity-50">•</span>
-                                    <span>{getTimeDiffText(faTimezone, partnerTimezone)}</span>
+                                    <span>{getTimeDiffText(bigTz, smallTz)}</span>
                                 </>
                             ) : "..."}
                         </span>
