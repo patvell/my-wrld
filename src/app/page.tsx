@@ -500,7 +500,7 @@ export default function Home() {
 
                   {upcomingJourneys.length === 0 && (
                     <div className="mt-12 text-center">
-                      <p className="text-white/20 text-xs italic tracking-wide">No scheduled horizons yet.</p>
+                      <p className="text-white/20 text-xs italic tracking-wide">Your upcoming flights will appear here</p>
                     </div>
                   )}
                 </>
