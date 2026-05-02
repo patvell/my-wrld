@@ -1,15 +1,30 @@
 import { createClient } from '@libsql/client';
 
-const db = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
-  authToken: process.env.TURSO_AUTH_TOKEN!,
-});
-
-// Initialize schema — runs once per cold start
+let client: ReturnType<typeof createClient> | null = null;
 let initialized = false;
 
 export async function getDb() {
-  if (!initialized) {
+  if (!client) {
+    const url = process.env.TURSO_DATABASE_URL;
+    const authToken = process.env.TURSO_AUTH_TOKEN;
+
+    if (!url || !authToken) {
+      // If we're building, we might not have these yet. 
+      // Return a dummy or throw a more helpful error if called at runtime.
+      if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
+         throw new Error("Missing Turso environment variables.");
+      }
+      // Return a proxy or just fail gracefully if this is just a build-time import
+      console.warn("Turso environment variables not found. Database will be unavailable.");
+      return null as any; 
+    }
+
+    client = createClient({ url, authToken });
+  }
+
+  const db = client;
+
+  if (!initialized && db) {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS flights (
         id TEXT PRIMARY KEY,
