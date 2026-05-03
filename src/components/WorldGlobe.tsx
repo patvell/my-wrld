@@ -85,6 +85,47 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     };
   }, []);
 
+  // Helper: Haversine distance in km
+  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371; // Earth's radius
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => {
+    // Distance threshold: 500km (~310 miles) for fool-proof tapping
+    const THRESHOLD = 500;
+    let closestPoint = null;
+    let minDistance = Infinity;
+
+    points.forEach(p => {
+      const dist = getDistance(lat, lng, p.lat, p.lng);
+      if (dist < minDistance && dist < THRESHOLD) {
+        minDistance = dist;
+        closestPoint = p;
+      }
+    });
+
+    if (closestPoint) {
+      // Snap to the closest airport
+      setSelectedPoint(selectedPoint?.code === (closestPoint as any).code ? null : closestPoint);
+    } else {
+      // Tapped empty space (ocean or far away)
+      setSelectedPoint(null);
+    }
+  }, [points, selectedPoint]);
+
+  const handleInteraction = useCallback(() => {
+    // Optional: Hide tooltip if user starts zooming or dramatic movement
+    // But for "fool proof" we might want to keep it until they tap again
+  }, []);
+
   const handleGlobeReady = useCallback(() => {
     if (!globeRef.current) return;
     const controls = globeRef.current.controls();
@@ -192,8 +233,8 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           atmosphereColor={primaryColor}
           atmosphereAltitude={0.25}
           onGlobeReady={handleGlobeReady}
-          onPointClick={(p: any) => setSelectedPoint(selectedPoint?.code === p.code ? null : p)}
-          onGlobeClick={() => setSelectedPoint(null)}
+          onGlobeClick={handleGlobeClick}
+          onZoom={handleInteraction}
           arcsData={arcs}
           arcStartLat={(d: any) => d.startLat}
           arcStartLng={(d: any) => d.startLng}
