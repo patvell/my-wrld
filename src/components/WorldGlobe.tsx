@@ -132,7 +132,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
         if (!seen.has(code)) {
           seen.add(code);
           const ap = AIRPORTS[code];
-          if (ap) {
+          if (ap && ap.lat !== undefined && ap.lng !== undefined) {
             // Significant increase in point size for touch friendliness
             // Especially for mobile, we make the "hit area" (visual size) much larger
             let size = past ? 0.45 : 0.25;
