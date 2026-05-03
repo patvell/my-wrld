@@ -37,6 +37,20 @@ function isFlightPast(flight: Flight): boolean {
   return new Date() >= twoHoursAfter;
 }
 
+// Parse a hex or rgb color into an RGB tuple
+function parseColor(color: string): [number, number, number] {
+  if (color.startsWith("#")) {
+    const hex = color.slice(1);
+    const r = parseInt(hex.slice(0, 2), 16) / 255;
+    const g = parseInt(hex.slice(2, 4), 16) / 255;
+    const b = parseInt(hex.slice(4, 6), 16) / 255;
+    return [r, g, b];
+  }
+  const m = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  if (m) return [parseInt(m[1]) / 255, parseInt(m[2]) / 255, parseInt(m[3]) / 255];
+  return [0.1, 0.1, 0.15];
+}
+
 export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   const globeRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 390, height: 844 });
@@ -51,10 +65,11 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  // Configure controls + initial POV after globe mounts
+  // Apply custom Three.js glass material to the globe surface
   const handleGlobeReady = useCallback(() => {
     if (!globeRef.current) return;
 
+    // --- Controls ---
     const controls = globeRef.current.controls();
     if (controls) {
       controls.autoRotate = true;
@@ -65,15 +80,60 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
       controls.maxDistance = 550;
     }
 
-    // Zoom out further on mobile so globe fits comfortably above the legend
+    // --- Custom glass globe material ---
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const THREE = require("three");
+      const [r, g, b] = parseColor(primaryColor);
+
+      // The globe mesh material: dark glass tinted with primaryColor
+      const glassMaterial = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(r * 0.25, g * 0.25, b * 0.25),
+        emissive: new THREE.Color(r * 0.08, g * 0.08, b * 0.08),
+        specular: new THREE.Color(0.6, 0.65, 0.7),
+        shininess: 120,
+        transparent: true,
+        opacity: 0.55,
+        side: THREE.FrontSide,
+      });
+
+      globeRef.current.globeMaterial(glassMaterial);
+    } catch (e) {
+      // Fallback: just clear the texture
+      globeRef.current.globeImageUrl("");
+    }
+
+    // --- POV ---
     const isMobile = window.innerWidth < 768;
     globeRef.current.pointOfView(
       { lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 },
       1200
     );
-  }, []);
+  }, [primaryColor]);
+
+  // Re-apply material when primaryColor changes
+  useEffect(() => {
+    if (!globeRef.current) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const THREE = require("three");
+      const [r, g, b] = parseColor(primaryColor);
+      const glassMaterial = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(r * 0.25, g * 0.25, b * 0.25),
+        emissive: new THREE.Color(r * 0.08, g * 0.08, b * 0.08),
+        specular: new THREE.Color(0.6, 0.65, 0.7),
+        shininess: 120,
+        transparent: true,
+        opacity: 0.55,
+        side: THREE.FrontSide,
+      });
+      globeRef.current.globeMaterial(glassMaterial);
+    } catch (_) {}
+  }, [primaryColor]);
 
   // Build arc data
+  // Past flights: crisp bright white — high contrast against the dim graticules
+  // Upcoming flights: warm amber glow — distinct from both white arcs and grey grid lines
   const arcs: ArcDatum[] = useMemo(() => {
     return flights
       .map((flight) => {
@@ -86,9 +146,10 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           startLng: origin.lng,
           endLat: dest.lat,
           endLng: dest.lng,
+          // Past: solid bright white | Upcoming: translucent warm amber
           color: past
-            ? (["rgba(255,255,255,0.9)", "rgba(255,255,255,0.9)"] as [string, string])
-            : (["rgba(255,255,255,0.15)", "rgba(255,255,255,0.15)"] as [string, string]),
+            ? (["rgba(255,255,255,1)", "rgba(255,255,255,1)"] as [string, string])
+            : (["rgba(255,210,100,0.25)", "rgba(255,210,100,0.25)"] as [string, string]),
           isPast: past,
         };
       })
@@ -110,8 +171,8 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
               lat: ap.lat,
               lng: ap.lng,
               code: ap.code,
-              color: past ? (ap.flagColor || "rgba(255,255,255,0.9)") : "rgba(255,255,255,0.2)",
-              size: past ? 0.45 : 0.25,
+              color: past ? "rgba(255,255,255,0.9)" : "rgba(255,210,100,0.6)",
+              size: past ? 0.4 : 0.22,
             });
           }
         }
@@ -132,7 +193,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
 
   return (
     <div className="relative w-full h-full flex flex-col">
-      {/* Stat bar */}
+      {/* Stat bar + Legend */}
       <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-4 pointer-events-none">
         <div
           className="flex items-center gap-4 px-5 py-2 rounded-full"
@@ -153,10 +214,10 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           )}
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-5 opacity-70">
-          <LegendItem label="Past" solid />
-          <LegendItem label="Upcoming" solid={false} />
+        {/* Legend — white for past, amber for upcoming */}
+        <div className="flex items-center gap-5 opacity-80">
+          <LegendItem label="Past" color="rgba(255,255,255,0.9)" solid />
+          <LegendItem label="Upcoming" color="rgba(255,210,100,0.7)" solid={false} />
         </div>
       </div>
 
@@ -167,12 +228,13 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="rgba(0,0,0,0)"
-          globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-          bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
-          showGraticules={false}
+          // No image texture — we use custom Three.js material
+          globeImageUrl=""
+          // Graticules form the wireframe skeleton visible through the glass
+          showGraticules={true}
           showAtmosphere={true}
           atmosphereColor={primaryColor}
-          atmosphereAltitude={0.22}
+          atmosphereAltitude={0.28}
           onGlobeReady={handleGlobeReady}
           // Arcs
           arcsData={arcs}
@@ -181,16 +243,16 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           arcEndLat={(d: object) => (d as ArcDatum).endLat}
           arcEndLng={(d: object) => (d as ArcDatum).endLng}
           arcColor={(d: object) => (d as ArcDatum).color}
-          arcStroke={(d: object) => ((d as ArcDatum).isPast ? 1.2 : 0.55)}
+          arcStroke={(d: object) => ((d as ArcDatum).isPast ? 1.4 : 0.6)}
           arcAltitude={0.3}
-          arcDashLength={(d: object) => ((d as ArcDatum).isPast ? 1 : 0.15)}
-          arcDashGap={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.1)}
-          arcDashAnimateTime={(d: object) => ((d as ArcDatum).isPast ? 0 : 5000)}
+          arcDashLength={(d: object) => ((d as ArcDatum).isPast ? 1 : 0.2)}
+          arcDashGap={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.12)}
+          arcDashAnimateTime={(d: object) => ((d as ArcDatum).isPast ? 0 : 6000)}
           // Points
           pointsData={points}
           pointColor={(d: object) => (d as PointDatum).color}
           pointRadius={(d: object) => (d as PointDatum).size}
-          pointAltitude={0.005}
+          pointAltitude={0.008}
           pointsMerge={false}
         />
       </div>
@@ -234,16 +296,16 @@ function StatPill({
   );
 }
 
-function LegendItem({ label, solid }: { label: string; solid: boolean }) {
+function LegendItem({ label, solid, color }: { label: string; solid: boolean; color: string }) {
   return (
     <div className="flex items-center gap-2">
       {solid ? (
         <div
           style={{
             height: 2,
-            width: 24,
+            width: 20,
             borderRadius: 9999,
-            background: "rgba(255,255,255,0.9)",
+            background: color,
           }}
         />
       ) : (
@@ -253,9 +315,9 @@ function LegendItem({ label, solid }: { label: string; solid: boolean }) {
               key={i}
               style={{
                 height: 2,
-                width: 5,
+                width: 4,
                 borderRadius: 9999,
-                background: "rgba(255,255,255,0.4)",
+                background: color,
               }}
             />
           ))}
