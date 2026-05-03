@@ -59,38 +59,69 @@ function applyGlassMaterial(globeRef: React.MutableRefObject<any>, primaryColor:
     const [r, g, b] = parseColor(primaryColor);
 
     const textureLoader = new THREE.TextureLoader();
-    // Load the blue marble texture — we'll heavily tint and desaturate it
-    // so continents appear as subtle darker etched regions in the glass
+    textureLoader.setCrossOrigin('anonymous');
+
+    // Load the base earth map
     textureLoader.load(
-      "//unpkg.com/three-globe/example/img/earth-blue-marble.jpg",
+      "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg",
       (earthTex: any) => {
-        // The glass material:
-        // - map: earth texture tinted to near-white so continents show subtly as darker etched glass
-        // - color: light frosted glass white with a very slight primaryColor tint
-        // - high shininess + bright specular = the glossy glass highlight
-        // - transparent + opacity 0.82 = background bleeds through
+        const image = earthTex.image;
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        ctx.drawImage(image, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imgData.data;
+
+        // Process pixels to create an alpha map where land is opaque and water is transparent
+        for (let i = 0; i < data.length; i += 4) {
+          const red = data[i];
+          const green = data[i + 1];
+          const blue = data[i + 2];
+          
+          // Determine if it's water (dark blue/black in the marble map)
+          // Land is generally brighter and has more red/green
+          const brightness = (red + green + blue) / 3;
+          const isWater = blue > red && blue > green && brightness < 50;
+
+          if (isWater) {
+            // Water: very transparent glossy glass
+            data[i] = r * 50;     // Slight tint
+            data[i+1] = g * 50;
+            data[i+2] = b * 80;
+            data[i+3] = 40;       // Low alpha (transparent)
+          } else {
+            // Land: frosted white/grey opaque glass
+            const landBright = Math.min(255, brightness + 150);
+            data[i] = landBright;
+            data[i+1] = landBright;
+            data[i+2] = landBright;
+            data[i+3] = 230;      // High alpha (opaque)
+          }
+        }
+
+        ctx.putImageData(imgData, 0, 0);
+        const customTex = new THREE.CanvasTexture(canvas);
+        
         const mat = new THREE.MeshPhongMaterial({
-          map: earthTex,
-          // Light frosted glass tint — primaryColor slightly bleeds into the glass body
-          color: new THREE.Color(
-            0.78 + r * 0.12,
-            0.82 + g * 0.10,
-            0.88 + b * 0.08
-          ),
-          // Very subtle emissive from primaryColor — the color "radiates" from inside the glass
-          emissive: new THREE.Color(r * 0.08, g * 0.08, b * 0.08),
-          // Bright specular for the glassy highlight
-          specular: new THREE.Color(1.0, 1.0, 1.0),
-          shininess: 220,
+          map: customTex,
+          color: new THREE.Color(0xffffff),
+          specular: new THREE.Color(0xffffff),
+          shininess: 150,
           transparent: true,
-          opacity: 0.82,
-          side: THREE.FrontSide,
+          opacity: 0.9,
+          side: THREE.DoubleSide
         });
 
         globeRef.current.globeMaterial(mat);
       }
     );
-  } catch (_) {}
+  } catch (err) {
+    console.error("Error applying glass material:", err);
+  }
 }
 
 export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
@@ -117,7 +148,6 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
       controls.maxDistance = 550;
     }
 
-    // Apply the crystal glass material
     applyGlassMaterial(globeRef, primaryColor);
 
     const isMobile = window.innerWidth < 768;
@@ -127,14 +157,12 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     );
   }, [primaryColor]);
 
-  // Re-apply when primaryColor changes
   useEffect(() => {
-    applyGlassMaterial(globeRef, primaryColor);
+    if (globeRef.current) {
+       applyGlassMaterial(globeRef, primaryColor);
+    }
   }, [primaryColor]);
 
-  // Arc colors:
-  // Past   → solid bright white (maximum contrast against the subtle grey glass continents)
-  // Future → soft warm amber dashes (distinct from both the white arcs AND the continent etching)
   const arcs: ArcDatum[] = useMemo(() => {
     return flights
       .map((flight) => {
@@ -149,7 +177,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           endLng: dest.lng,
           color: past
             ? (["rgba(255,255,255,1)", "rgba(255,255,255,1)"] as [string, string])
-            : (["rgba(255,200,80,0.35)", "rgba(255,200,80,0.35)"] as [string, string]),
+            : (["rgba(255,200,80,0.5)", "rgba(255,200,80,0.5)"] as [string, string]),
           isPast: past,
         };
       })
@@ -170,8 +198,8 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
               lat: ap.lat,
               lng: ap.lng,
               code: ap.code,
-              color: past ? "rgba(255,255,255,0.95)" : "rgba(255,200,80,0.7)",
-              size: past ? 0.42 : 0.24,
+              color: past ? "rgba(255,255,255,1)" : "rgba(255,200,80,0.8)",
+              size: past ? 0.45 : 0.25,
             });
           }
         }
@@ -191,7 +219,6 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
 
   return (
     <div className="relative w-full h-full flex flex-col">
-      {/* Stat bar + Legend */}
       <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-4 pointer-events-none">
         <div
           className="flex items-center gap-4 px-5 py-2 rounded-full"
@@ -218,7 +245,6 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
         </div>
       </div>
 
-      {/* Globe */}
       <div className="absolute inset-0 flex items-center justify-center">
         <Globe
           ref={globeRef}
@@ -245,7 +271,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           pointsData={points}
           pointColor={(d: object) => (d as PointDatum).color}
           pointRadius={(d: object) => (d as PointDatum).size}
-          pointAltitude={0.008}
+          pointAltitude={0.01}
           pointsMerge={false}
         />
       </div>
