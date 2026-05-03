@@ -98,8 +98,35 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     return R * c;
   };
 
+  const points = useMemo(() => {
+    const seen = new Set<string>();
+    const pts: PointDatum[] = [];
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    
+    flights.forEach((f) => {
+      const past = isFlightPast(f);
+      [f.origin_code, f.destination_code].forEach((code) => {
+        if (!seen.has(code)) {
+          seen.add(code);
+          const ap = AIRPORTS[code];
+          if (ap && ap.lat !== undefined && ap.lng !== undefined) {
+            let size = past ? 0.45 : 0.25;
+            if (isMobile) size *= 2.5;
+            else size *= 1.5;
+
+            pts.push({ 
+              lat: ap.lat, lng: ap.lng, code, 
+              color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.6)", 
+              size 
+            });
+          }
+        }
+      });
+    });
+    return pts;
+  }, [flights]);
+
   const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => {
-    // Distance threshold: 500km (~310 miles) for fool-proof tapping
     const THRESHOLD = 500;
     let closestPoint = null;
     let minDistance = Infinity;
@@ -113,17 +140,13 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     });
 
     if (closestPoint) {
-      // Snap to the closest airport
       setSelectedPoint(selectedPoint?.code === (closestPoint as any).code ? null : closestPoint);
     } else {
-      // Tapped empty space (ocean or far away)
       setSelectedPoint(null);
     }
   }, [points, selectedPoint]);
 
   const handleInteraction = useCallback(() => {
-    // Optional: Hide tooltip if user starts zooming or dramatic movement
-    // But for "fool proof" we might want to keep it until they tap again
   }, []);
 
   const handleGlobeReady = useCallback(() => {
@@ -160,36 +183,6 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
         isPast: past
       };
     }).filter(Boolean) as ArcDatum[];
-  }, [flights]);
-
-  const points = useMemo(() => {
-    const seen = new Set<string>();
-    const pts: PointDatum[] = [];
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    
-    flights.forEach((f) => {
-      const past = isFlightPast(f);
-      [f.origin_code, f.destination_code].forEach((code) => {
-        if (!seen.has(code)) {
-          seen.add(code);
-          const ap = AIRPORTS[code];
-          if (ap && ap.lat !== undefined && ap.lng !== undefined) {
-            // Significant increase in point size for touch friendliness
-            // Especially for mobile, we make the "hit area" (visual size) much larger
-            let size = past ? 0.45 : 0.25;
-            if (isMobile) size *= 2.5; // Make them 2.5x larger on mobile
-            else size *= 1.5;           // 1.5x larger on desktop for better clickability
-
-            pts.push({ 
-              lat: ap.lat, lng: ap.lng, code, 
-              color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.6)", 
-              size 
-            });
-          }
-        }
-      });
-    });
-    return pts;
   }, [flights]);
 
   const uniqueAirportCount = useMemo(() => {
