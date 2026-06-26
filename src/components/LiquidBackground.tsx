@@ -1,20 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
-import { animate } from "framer-motion";
-import { getCountryTheme } from "@/lib/countryTheme";
-import { lerpCountryTheme } from "@/lib/lerpCountryTheme";
-import { applyThemeChrome } from "@/lib/applyThemeChrome";
+import React from "react";
+import { usePlaceTransition } from "@/components/PlaceTransitionProvider";
 import { hexToRgba } from "@/lib/colors";
-import {
-    THEME_TRANSITION_MS,
-    THEME_TRANSITION_MOTION_EASE,
-} from "@/lib/themeTransition";
 import { CountryTheme } from "@/types/countryTheme";
-
-interface LiquidBackgroundProps {
-    airportCode: string;
-}
 
 function BackgroundLayer({ theme }: { theme: CountryTheme }) {
     const [c0, c1, c2] = theme.washColors;
@@ -80,79 +69,10 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
     );
 }
 
-export default function LiquidBackground({ airportCode }: LiquidBackgroundProps) {
-    const targetTheme = getCountryTheme(airportCode);
-    const [fromTheme, setFromTheme] = useState(targetTheme);
-    const [toTheme, setToTheme] = useState(targetTheme);
-    const [progress, setProgress] = useState(1);
+export default function LiquidBackground() {
+    const { fromTheme, toTheme, progress, isTransitioning } = usePlaceTransition();
 
-    const settledCodeRef = useRef(airportCode);
-    const displayRef = useRef({
-        from: targetTheme,
-        to: targetTheme,
-        progress: 1,
-    });
-
-    useEffect(() => {
-        if (airportCode === settledCodeRef.current) {
-            applyThemeChrome(getCountryTheme(airportCode));
-            return;
-        }
-
-        const nextTheme = getCountryTheme(airportCode);
-        const prevTheme = getCountryTheme(settledCodeRef.current);
-
-        if (prevTheme.countryIso === nextTheme.countryIso) {
-            settledCodeRef.current = airportCode;
-            displayRef.current = { from: nextTheme, to: nextTheme, progress: 1 };
-            setFromTheme(nextTheme);
-            setToTheme(nextTheme);
-            setProgress(1);
-            applyThemeChrome(nextTheme);
-            return;
-        }
-
-        const { from, to, progress: currentProgress } = displayRef.current;
-        const startFrom =
-            currentProgress < 1
-                ? lerpCountryTheme(from, to, currentProgress)
-                : prevTheme;
-
-        displayRef.current = { from: startFrom, to: nextTheme, progress: 0 };
-        setFromTheme(startFrom);
-        setToTheme(nextTheme);
-        setProgress(0);
-        applyThemeChrome(startFrom);
-
-        const controls = animate(0, 1, {
-            duration: THEME_TRANSITION_MS / 1000,
-            ease: [...THEME_TRANSITION_MOTION_EASE],
-            onUpdate: (value) => {
-                displayRef.current.progress = value;
-                setProgress(value);
-                applyThemeChrome(
-                    lerpCountryTheme(startFrom, nextTheme, value)
-                );
-            },
-            onComplete: () => {
-                settledCodeRef.current = airportCode;
-                displayRef.current = {
-                    from: nextTheme,
-                    to: nextTheme,
-                    progress: 1,
-                };
-                setFromTheme(nextTheme);
-                setToTheme(nextTheme);
-                setProgress(1);
-                applyThemeChrome(nextTheme);
-            },
-        });
-
-        return () => controls.stop();
-    }, [airportCode]);
-
-    const isCrossfading = fromTheme.countryIso !== toTheme.countryIso;
-    const overlayOpacity = isCrossfading ? progress : 0;
+    const overlayOpacity = isTransitioning ? progress : 0;
 
     return (
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
@@ -160,7 +80,7 @@ export default function LiquidBackground({ airportCode }: LiquidBackgroundProps)
                 <BackgroundLayer theme={fromTheme} />
             </div>
 
-            {isCrossfading && (
+            {isTransitioning && (
                 <div
                     className="absolute inset-0"
                     style={{ opacity: overlayOpacity }}

@@ -1,5 +1,5 @@
 /** Shared timing for country theme transitions (background, chrome, body, persona). */
-export const THEME_TRANSITION_MS = 4800;
+export const THEME_TRANSITION_MS = 3500;
 
 export const THEME_TRANSITION_EASE = "cubic-bezier(0.16, 1, 0.3, 1)";
 
