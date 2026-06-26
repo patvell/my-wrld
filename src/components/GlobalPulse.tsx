@@ -5,7 +5,7 @@ import { Plane, Home } from "lucide-react";
 import { getAirportTimezone, AIRPORTS } from "@/data/airports";
 import { getReadableTextColors } from "@/lib/colors";
 import { CountryTheme } from "@/types/countryTheme";
-import { THEME_TRANSITION_STYLE } from "@/lib/themeTransition";
+import { THEME_TRANSITION_STYLE, THEME_TRANSITION_MS, THEME_TRANSITION_MOTION_EASE } from "@/lib/themeTransition";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -99,20 +99,28 @@ export default function GlobalPulse({
     const bigTz = persona === "plane" ? faTimezone : partnerTimezone;
     const smallTz = persona === "plane" ? partnerTimezone : faTimezone;
 
+    const personaTransition = {
+        duration: THEME_TRANSITION_MS / 1000,
+        ease: THEME_TRANSITION_MOTION_EASE,
+    };
+
     return (
-        <div className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 transition-colors duration-1000 overflow-hidden pointer-events-none">
+        <div
+            className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
+            style={{ transition: `color ${THEME_TRANSITION_STYLE}` }}
+        >
             {/* Background handled by parent now */}
 
             {/* Main Display Area */}
-            <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
-                <AnimatePresence mode="wait">
+            <div className="relative flex flex-col items-center justify-center w-full max-w-lg gap-2 min-h-[220px] pointer-events-auto">
+                <AnimatePresence initial={false}>
                     <motion.div
                         key={persona}
-                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                        initial={{ opacity: 0, y: 18, scale: 0.97 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                        className="flex flex-col items-center"
+                        exit={{ opacity: 0, y: -18, scale: 0.97 }}
+                        transition={personaTransition}
+                        className="flex flex-col items-center absolute inset-x-0"
                     >
                         {/* Status Label */}
                         <div className="flex items-center gap-2 mb-2">

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { animate } from "framer-motion";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { lerpCountryTheme } from "@/lib/lerpCountryTheme";
+import { applyThemeChrome } from "@/lib/applyThemeChrome";
 import { hexToRgba } from "@/lib/colors";
 import {
     THEME_TRANSITION_MS,
@@ -94,6 +95,7 @@ export default function LiquidBackground({ airportCode }: LiquidBackgroundProps)
 
     useEffect(() => {
         if (airportCode === settledCodeRef.current) {
+            applyThemeChrome(getCountryTheme(airportCode));
             return;
         }
 
@@ -106,6 +108,7 @@ export default function LiquidBackground({ airportCode }: LiquidBackgroundProps)
             setFromTheme(nextTheme);
             setToTheme(nextTheme);
             setProgress(1);
+            applyThemeChrome(nextTheme);
             return;
         }
 
@@ -119,6 +122,7 @@ export default function LiquidBackground({ airportCode }: LiquidBackgroundProps)
         setFromTheme(startFrom);
         setToTheme(nextTheme);
         setProgress(0);
+        applyThemeChrome(startFrom);
 
         const controls = animate(0, 1, {
             duration: THEME_TRANSITION_MS / 1000,
@@ -126,6 +130,9 @@ export default function LiquidBackground({ airportCode }: LiquidBackgroundProps)
             onUpdate: (value) => {
                 displayRef.current.progress = value;
                 setProgress(value);
+                applyThemeChrome(
+                    lerpCountryTheme(startFrom, nextTheme, value)
+                );
             },
             onComplete: () => {
                 settledCodeRef.current = airportCode;
@@ -137,6 +144,7 @@ export default function LiquidBackground({ airportCode }: LiquidBackgroundProps)
                 setFromTheme(nextTheme);
                 setToTheme(nextTheme);
                 setProgress(1);
+                applyThemeChrome(nextTheme);
             },
         });
 

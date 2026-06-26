@@ -343,7 +343,7 @@ export default function Home() {
   };
 
   // Sync background and theme-color with browser UI
-  useCountryThemeStyles(countryTheme);
+  useCountryThemeStyles();
 
 
   return (
@@ -613,7 +613,6 @@ export default function Home() {
             activeTab={activeTab === "settings" ? "home" : activeTab}
             onTabChange={handleTabChange}
             onAddClick={() => setIsAddModalOpen(true)}
-            chromeColor={countryTheme.chromeColor}
           />
         </div>
       </div>
