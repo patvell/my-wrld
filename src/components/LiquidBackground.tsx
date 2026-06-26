@@ -78,75 +78,110 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
     const [incomingTheme, setIncomingTheme] = useState(theme);
     const [overlayOpacity, setOverlayOpacity] = useState(0);
     const [isCrossfading, setIsCrossfading] = useState(false);
+    const [overlayTransitionEnabled, setOverlayTransitionEnabled] = useState(true);
 
     const settledIsoRef = useRef(theme.countryIso);
     const settledThemeRef = useRef(theme);
     const incomingThemeRef = useRef(theme);
     const isCrossfadingRef = useRef(false);
     const overlayOpacityRef = useRef(0);
+    const transitionGenRef = useRef(0);
+    const completingGenRef = useRef(0);
     const rafRef = useRef<number | null>(null);
 
-    useEffect(() => {
-        if (theme.countryIso === settledIsoRef.current) {
-            settledThemeRef.current = theme;
-            incomingThemeRef.current = theme;
-            setSettledTheme(theme);
-            setIncomingTheme(theme);
-            setIsCrossfading(false);
-            isCrossfadingRef.current = false;
-            setOverlayOpacity(0);
-            overlayOpacityRef.current = 0;
+    const cancelPendingRaf = () => {
+        if (rafRef.current !== null) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+        }
+    };
+
+    const commitSettled = (next: CountryTheme) => {
+        settledIsoRef.current = next.countryIso;
+        settledThemeRef.current = next;
+        incomingThemeRef.current = next;
+        setSettledTheme(next);
+        setIncomingTheme(next);
+        setIsCrossfading(false);
+        isCrossfadingRef.current = false;
+        setOverlayOpacity(0);
+        overlayOpacityRef.current = 0;
+        setOverlayTransitionEnabled(true);
+    };
+
+    const startCrossfade = (target: CountryTheme) => {
+        if (target.countryIso === incomingThemeRef.current.countryIso && isCrossfadingRef.current) {
             return;
         }
 
-        const baseTheme =
+        transitionGenRef.current += 1;
+        const gen = transitionGenRef.current;
+
+        const fromTheme =
             isCrossfadingRef.current && overlayOpacityRef.current > 0
                 ? incomingThemeRef.current
                 : settledThemeRef.current;
 
-        settledThemeRef.current = baseTheme;
-        incomingThemeRef.current = theme;
-        setSettledTheme(baseTheme);
-        setIncomingTheme(theme);
+        settledThemeRef.current = fromTheme;
+        incomingThemeRef.current = target;
+        setSettledTheme(fromTheme);
+        setIncomingTheme(target);
         setIsCrossfading(true);
         isCrossfadingRef.current = true;
+
+        cancelPendingRaf();
+
+        // Snap overlay to 0 without animating backward (avoids jank on rapid toggles)
+        setOverlayTransitionEnabled(false);
         setOverlayOpacity(0);
         overlayOpacityRef.current = 0;
 
-        if (rafRef.current !== null) {
-            cancelAnimationFrame(rafRef.current);
-        }
-
         rafRef.current = requestAnimationFrame(() => {
+            setOverlayTransitionEnabled(true);
             rafRef.current = requestAnimationFrame(() => {
+                if (gen !== transitionGenRef.current) return;
                 setOverlayOpacity(1);
                 overlayOpacityRef.current = 1;
+                completingGenRef.current = gen;
                 rafRef.current = null;
             });
         });
+    };
 
-        return () => {
-            if (rafRef.current !== null) {
-                cancelAnimationFrame(rafRef.current);
-                rafRef.current = null;
+    useEffect(() => {
+        const idleSameCountry =
+            theme.countryIso === settledIsoRef.current && !isCrossfadingRef.current;
+
+        if (idleSameCountry) {
+            if (settledThemeRef.current !== theme) {
+                commitSettled(theme);
             }
-        };
+            return;
+        }
+
+        if (theme.countryIso === settledIsoRef.current && isCrossfadingRef.current) {
+            // Toggled back before prior crossfade finished — must crossfade, not snap
+            startCrossfade(theme);
+            return;
+        }
+
+        if (theme.countryIso !== settledIsoRef.current) {
+            startCrossfade(theme);
+        }
+
+        return cancelPendingRaf;
     }, [theme]);
 
     const handleOverlayTransitionEnd = (
         event: React.TransitionEvent<HTMLDivElement>
     ) => {
-        if (event.propertyName !== "opacity" || overlayOpacityRef.current !== 1) {
-            return;
-        }
+        if (event.target !== event.currentTarget) return;
+        if (event.propertyName !== "opacity") return;
+        if (!overlayTransitionEnabled) return;
+        if (overlayOpacityRef.current !== 1) return;
+        if (completingGenRef.current !== transitionGenRef.current) return;
 
-        settledIsoRef.current = incomingThemeRef.current.countryIso;
-        settledThemeRef.current = incomingThemeRef.current;
-        setSettledTheme(incomingThemeRef.current);
-        setIsCrossfading(false);
-        isCrossfadingRef.current = false;
-        setOverlayOpacity(0);
-        overlayOpacityRef.current = 0;
+        commitSettled(incomingThemeRef.current);
     };
 
     return (
@@ -160,7 +195,9 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
                     className="absolute inset-0"
                     style={{
                         opacity: overlayOpacity,
-                        transition: `opacity ${PLACE_TRANSITION_CSS}`,
+                        transition: overlayTransitionEnabled
+                            ? `opacity ${PLACE_TRANSITION_CSS}`
+                            : "none",
                     }}
                     onTransitionEnd={handleOverlayTransitionEnd}
                 >
