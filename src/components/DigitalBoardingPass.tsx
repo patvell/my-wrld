@@ -167,7 +167,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 }}
                 onClick={toggleShift}
                 className={cn(
-                    "relative w-full h-full glass rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col",
+                    "relative w-full h-full glass-dark rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col",
                     statusColor,
                     isImminent && "animate-pulse-slow",
                     // Remove shadow when shifted to prevent artifact over buttons

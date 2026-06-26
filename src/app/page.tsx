@@ -9,8 +9,10 @@ import WorldGlobe from "@/components/WorldGlobe";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import { Flight, PersonaMode } from "@/types";
-import { getAirportColor, getAirportTimezone } from "@/data/airports";
+import { getAirportTimezone } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
+import { getCountryTheme } from "@/lib/countryTheme";
+import { getContrastHex } from "@/lib/colors";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -157,9 +159,16 @@ export default function Home() {
   };
 
   const currentLocation = getCurrentLocation();
-  // While loading, we use a neutral dark charcoal to avoid any color flashes (red, etc.)
   const currentLocationCode = currentPersona === "home" ? "YUL" : currentLocation.code;
-  const primaryColor = loading ? "#0a0a0a" : getAirportColor(currentLocationCode);
+  const countryTheme = loading
+    ? getCountryTheme("YUL")
+    : getCountryTheme(currentLocationCode);
+  const textColor = getContrastHex(countryTheme.effectiveBg);
+  const isLightText = textColor === "#FFFFFF";
+  const mutedTextClass = isLightText ? "text-white/50" : "text-neutral-500";
+  const subtleTextClass = isLightText ? "text-white/20" : "text-neutral-400";
+  const softTextClass = isLightText ? "text-white/60" : "text-neutral-600";
+  const iconMutedClass = isLightText ? "text-white opacity-50" : "text-neutral-400";
 
   const upcomingFlights = flights.filter(f => !hasFlightArrived(f));
   const upcomingJourneys = groupFlightsIntoJourneys(upcomingFlights, true);
@@ -333,7 +342,7 @@ export default function Home() {
   };
 
   // Sync background and theme-color with browser UI
-  useThemeColor(primaryColor);
+  useThemeColor(countryTheme.themeColor);
 
 
   return (
@@ -341,10 +350,13 @@ export default function Home() {
       initial={{ opacity: 0 }}
       animate={{ opacity: isReady ? 1 : 0 }}
       transition={{ duration: 1.5, ease: "easeInOut" }}
-      className="h-[100dvh] min-h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col"
+      className={cn(
+        "h-[100dvh] min-h-[100dvh] w-full font-sans selection:bg-emirates-red/30 relative overflow-hidden flex flex-col",
+        isLightText ? "text-white" : "text-neutral-900"
+      )}
     >
       {/* Full Screen Background */}
-      <LiquidBackground primaryColor={primaryColor} />
+      <LiquidBackground theme={countryTheme} />
 
       {/* Top Navigation / Clocks - Only visible on Home/Settings */}
       <AnimatePresence>
@@ -381,7 +393,7 @@ export default function Home() {
             className="absolute top-[340px] left-0 right-0 z-40 flex justify-center pointer-events-none"
           >
             <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent mix-blend-plus-lighter backdrop-blur-sm">
-              <h3 className="text-xs font-black tracking-[0.3em] text-white/50 uppercase drop-shadow-md">Upcoming Trips ({upcomingFlights.length})</h3>
+              <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase drop-shadow-md", mutedTextClass)}>Upcoming Trips ({upcomingFlights.length})</h3>
               <div className="h-[1px] flex-1 bg-white/10 ml-6" />
             </div>
           </motion.div>
@@ -398,11 +410,11 @@ export default function Home() {
             className="absolute top-8 left-0 right-0 z-40 flex justify-center pointer-events-none"
           >
             <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent pointer-events-auto">
-              <h3 className="text-xs font-black tracking-[0.3em] text-white/50 uppercase drop-shadow-md">Past Trips ({pastFlights.length})</h3>
+              <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase drop-shadow-md", mutedTextClass)}>Past Trips ({pastFlights.length})</h3>
               <div className="h-[1px] flex-1 bg-white/10 mx-6" />
               <button
                 onClick={() => setHistorySortAsc(!historySortAsc)}
-                className="text-white/50 hover:text-white transition-colors"
+                className={cn(mutedTextClass, isLightText ? "hover:text-white" : "hover:text-neutral-800", "transition-colors")}
                 title={historySortAsc ? "Sort Oldest to Newest" : "Sort Newest to Oldest"}
               >
                 <ArrowUpDown size={14} strokeWidth={3} />
@@ -425,7 +437,7 @@ export default function Home() {
               className="absolute inset-0 w-full h-full flex flex-col"
             >
                {/* Globe will go here */}
-               <WorldGlobe flights={flights} primaryColor={primaryColor} />
+               <WorldGlobe flights={flights} primaryColor={countryTheme.accent} />
             </motion.div>
           ) : activeTab === "home" ? (
             <motion.div
@@ -483,7 +495,7 @@ export default function Home() {
                                   variants={cardVariants}
                                   className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
                                 >
-                                  <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
+                                  <div className={cn("w-6 h-6 rounded-full flex items-center justify-center relative z-10", isLightText ? "glass text-white" : "glass-dark text-white")}>
                                     {isLayover ? (
                                       <Moon size={12} className="fill-white/20" />
                                     ) : (
@@ -500,7 +512,7 @@ export default function Home() {
 
                   {upcomingJourneys.length === 0 && (
                     <div className="mt-12 text-center">
-                      <p className="text-white/20 text-xs italic tracking-wide">Your upcoming flights will appear here</p>
+                      <p className={cn(subtleTextClass, "text-xs italic tracking-wide")}>Your upcoming flights will appear here</p>
                     </div>
                   )}
                 </>
@@ -561,7 +573,7 @@ export default function Home() {
                                   variants={cardVariants}
                                   className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
                                 >
-                                  <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
+                                  <div className={cn("w-6 h-6 rounded-full flex items-center justify-center relative z-10", isLightText ? "glass text-white" : "glass-dark text-white")}>
                                     {isLayover ? (
                                       <Moon size={12} className="fill-white/20" />
                                     ) : (
@@ -578,10 +590,10 @@ export default function Home() {
 
                   {pastJourneys.length === 0 && (
                     <div className="mt-20 flex flex-col items-center text-center">
-                      <div className="w-24 h-24 rounded-full border border-white/5 flex items-center justify-center mb-6 bg-white/5">
-                        <History className="text-white opacity-50 w-10 h-10" />
+                      <div className={cn("w-24 h-24 rounded-full border flex items-center justify-center mb-6", isLightText ? "border-white/5 bg-white/5" : "border-neutral-200 bg-white/60")}>
+                        <History className={cn(iconMutedClass, "w-10 h-10")} />
                       </div>
-                      <p className="text-white/60 text-sm font-medium tracking-wide">Your past journeys will appear here.</p>
+                      <p className={cn(softTextClass, "text-sm font-medium tracking-wide")}>Your past journeys will appear here.</p>
                     </div>
                   )}
                 </>
@@ -598,7 +610,7 @@ export default function Home() {
             activeTab={activeTab === "settings" ? "home" : activeTab}
             onTabChange={handleTabChange}
             onAddClick={() => setIsAddModalOpen(true)}
-            primaryColor={primaryColor}
+            primaryColor={countryTheme.accent}
           />
         </div>
       </div>

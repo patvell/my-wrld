@@ -10,11 +10,11 @@
 }
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --background: #F8F6F3;
+  --foreground: #1a1a1a;
   --emirates-red: #D71A21;
   --dubai-gold: #D4AF37;
-  --dynamic-background: #000000;
+  --dynamic-background: #F8F6F3;
 }
 
 html,
@@ -80,5 +80,24 @@ body {
         rgba(255, 255, 255, 0.05) 75%);
     background-size: 200% 100%;
     animation: shimmer 2s infinite linear;
+  }
+
+  @keyframes liquid-drift {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+
+    33% {
+      transform: translate(1.5%, -1%) scale(1.03);
+    }
+
+    66% {
+      transform: translate(-1%, 1.5%) scale(0.98);
+    }
+  }
+
+  .liquid-blob {
+    animation: liquid-drift 24s ease-in-out infinite;
   }
 }

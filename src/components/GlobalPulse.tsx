@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
-import { getAirportColor, getAirportTimezone, AIRPORTS } from "@/data/airports";
+import { getAirportTimezone, AIRPORTS } from "@/data/airports";
+import { getCountryTheme } from "@/lib/countryTheme";
 import { getContrastHex } from "@/lib/colors";
 
 interface GlobalPulseProps {
@@ -29,18 +30,14 @@ export default function GlobalPulse({
 
     // Determine background color based on current location
     const currentLocationCode = persona === "home" ? partnerCode : faCode;
-    const primaryColor = getAirportColor(currentLocationCode);
+    const countryTheme = getCountryTheme(currentLocationCode);
 
     // Get Timezones
     // Partner is always Montreal (YUL) as per request for now, or derived from code
     const partnerTimezone = getAirportTimezone(partnerCode);
     const faTimezone = getAirportTimezone(faCode);
 
-    // Dynamic Text Color based on background luminance
-    // We assume the top part is dominated by primaryColor or a mix. 
-    // Let's use primary color as the main determinant for now, or an average.
-    // For a "mosaic", it's safer to check contrast against the dominant color behind the text.
-    const textColor = getContrastHex(primaryColor);
+    const textColor = getContrastHex(countryTheme.effectiveBg);
     const subTextColor = textColor === "#000000" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
     const iconColor = textColor === "#000000" ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)";
 
