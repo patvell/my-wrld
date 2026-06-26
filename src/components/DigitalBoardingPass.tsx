@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flight } from "@/types";
 import { Plane, Trash2, Edit, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
 import { AIRLINE_CODE, FLIGHTAWARE_CARRIER } from "@/lib/config";
+import type { LiveStatus } from "@/lib/aeroMapper";
 
 interface BoardingPassProps {
     flight: Flight;
@@ -17,10 +18,35 @@ interface BoardingPassProps {
 
 export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false }: BoardingPassProps) {
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+    const [live, setLive] = useState<LiveStatus | null>(null);
     const flightNumber = flight.flight_number ? flight.flight_number.replace(/^\D+/g, '') : "---";
 
     const imminent = isImminent(flight);
     const past = isPast(flight);
+
+    // While the flight is in its live window, pull real status from AeroAPI
+    // (server-cached). Fetch on activation, then refresh slowly; setState only
+    // happens inside the async callback. No-op gracefully if not configured.
+    useEffect(() => {
+        if (!isActive) return;
+        let active = true;
+        const load = async () => {
+            try {
+                const res = await fetch(`/api/flights/${flight.id}/status`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (active && data?.configured && data?.found) setLive(data.status as LiveStatus);
+            } catch {
+                /* ignore: keep static UI */
+            }
+        };
+        load();
+        const timer = setInterval(load, 5 * 60 * 1000);
+        return () => {
+            active = false;
+            clearInterval(timer);
+        };
+    }, [isActive, flight.id]);
 
     // Live active state gets a brighter, glowing treatment.
     const statusColor = isActive
@@ -161,7 +187,9 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                         className="flex items-center gap-1.5 mb-1"
                                     >
                                         <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] animate-pulse" />
-                                        <span className="text-[10px] font-black tracking-[0.2em] text-white uppercase drop-shadow-sm">Live</span>
+                                        <span className="text-[10px] font-black tracking-[0.2em] text-white uppercase drop-shadow-sm">
+                                            {live?.status ? live.status : "Live"}
+                                        </span>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -172,7 +200,14 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             </div>
 
                             <div className="w-24 h-[1px] bg-white/10 overflow-hidden relative">
-                                {!past ? (
+                                {isActive && live && live.progress_percent != null ? (
+                                    <motion.div
+                                        className="absolute inset-y-0 left-0 bg-white"
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${Math.max(0, Math.min(100, live.progress_percent))}%` }}
+                                        transition={{ duration: 0.6, ease: "easeOut" }}
+                                    />
+                                ) : !past ? (
                                     <motion.div
                                         className="absolute inset-y-0 left-0 w-1/3 bg-white/60 blur-[1px]"
                                         animate={{ x: ["-100%", "300%"] }}
@@ -182,6 +217,18 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                     <div className="absolute inset-y-0 left-0 w-full bg-white/20" />
                                 )}
                             </div>
+
+                            {isActive && live && (live.arrival_delay_min || live.gate_destination) && (
+                                <span className="mt-1.5 text-[8px] font-bold uppercase tracking-widest text-white/70">
+                                    {live.arrival_delay_min && live.arrival_delay_min > 0
+                                        ? `Delayed ${live.arrival_delay_min}m`
+                                        : live.arrival_delay_min && live.arrival_delay_min < 0
+                                            ? `Early ${Math.abs(live.arrival_delay_min)}m`
+                                            : null}
+                                    {live.arrival_delay_min && live.gate_destination ? " | " : null}
+                                    {live.gate_destination ? `Gate ${live.gate_destination}` : null}
+                                </span>
+                            )}
                         </div>
                     </div>
 

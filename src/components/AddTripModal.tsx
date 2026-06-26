@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Calendar, Plane, Clock } from "lucide-react";
+import { X, Calendar, Plane, Clock, Search, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
 import { Flight, FlightInput } from "@/types";
 import { normalizeWallClock } from "@/lib/time";
@@ -33,8 +34,73 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     // Validation Errors
     const [errors, setErrors] = useState<{ origin?: string; destination?: string }>({});
 
+    // AeroAPI lookup (autofill)
+    const [aeroConfigured, setAeroConfigured] = useState(false);
+    const [lookingUp, setLookingUp] = useState(false);
+
     const dialogRef = useRef<HTMLDivElement>(null);
     const lastFocusedRef = useRef<HTMLElement | null>(null);
+
+    // Probe whether AeroAPI is available so we only show the lookup affordance when usable.
+    useEffect(() => {
+        if (!isOpen) return;
+        let active = true;
+        fetch("/api/aeroapi")
+            .then((r) => r.json())
+            .then((d) => {
+                if (active) setAeroConfigured(Boolean(d?.configured));
+            })
+            .catch(() => {
+                if (active) setAeroConfigured(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [isOpen]);
+
+    const handleLookup = async () => {
+        const digits = flightNum.replace(/\D/g, "");
+        if (!digits) {
+            toast.error("Enter a flight number first");
+            return;
+        }
+        if (!originDate) {
+            toast.error("Pick a departure date first");
+            return;
+        }
+        setLookingUp(true);
+        try {
+            const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: originDate });
+            const res = await fetch(`/api/aeroapi/lookup?${params.toString()}`);
+            if (!res.ok) throw new Error("Lookup failed");
+            const data = await res.json();
+            if (!data.configured) {
+                toast.error("Flight lookup is not configured");
+                setAeroConfigured(false);
+                return;
+            }
+            if (!data.found || !data.flight) {
+                toast.error("No matching flight found for that number and date");
+                return;
+            }
+            const f = data.flight as FlightInput;
+            const dep = normalizeWallClock(f.departure_time);
+            const arr = normalizeWallClock(f.arrival_time);
+            setOrigin(f.origin_code);
+            setOriginDate(dep.slice(0, 10));
+            setOriginTime(dep.slice(11, 16));
+            setDestination(f.destination_code);
+            setDestDate(arr.slice(0, 10));
+            setDestTime(arr.slice(11, 16));
+            if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
+            setErrors({});
+            toast.success(`Found ${f.origin_code} -> ${f.destination_code}`);
+        } catch {
+            toast.error("Could not look up flight");
+        } finally {
+            setLookingUp(false);
+        }
+    };
 
     // Focus management: trap focus while open, close on Escape, restore on close.
     useEffect(() => {
@@ -74,7 +140,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
     // Reset or Populate form on open. Syncing the form fields to the selected
     // flight when the dialog opens is a legitimate prop-to-state sync.
-    /* eslint-disable react-hooks/set-state-in-effect */
     useEffect(() => {
         if (isOpen) {
             if (flightToEdit) {
@@ -110,7 +175,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             }
         }
     }, [isOpen, flightToEdit]);
-    /* eslint-enable react-hooks/set-state-in-effect */
 
     const handleTimeChange = (val: string, setter: (v: string) => void) => {
         const digits = val.replace(/\D/g, '').slice(0, 4);
@@ -240,6 +304,22 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                             required
                                         />
                                     </div>
+
+                                    {aeroConfigured && (
+                                        <button
+                                            type="button"
+                                            onClick={handleLookup}
+                                            disabled={lookingUp}
+                                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white/70 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                        >
+                                            {lookingUp ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <Search size={14} />
+                                            )}
+                                            {lookingUp ? "Looking up..." : "Look up flight"}
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* 2. Dual Column Layout */}
