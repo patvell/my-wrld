@@ -1,13 +1,10 @@
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from "framer-motion";
+import React, { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Flight } from "@/types";
-import { Plane, Clock, MapPin, ChevronRight, Share2, Trash2, Edit, X, Check } from "lucide-react";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import { Plane, Trash2, Edit, X, Check } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
+import { AIRLINE_CODE, FLIGHTAWARE_CARRIER } from "@/lib/config";
 
 interface BoardingPassProps {
     flight: Flight;
@@ -19,67 +16,21 @@ interface BoardingPassProps {
 }
 
 export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false }: BoardingPassProps) {
-    const [mounted, setMounted] = useState(false);
-    // Internal isShifted state removed in favor of props
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-    const [flightNumber, setFlightNumber] = useState("---");
+    const flightNumber = flight.flight_number ? flight.flight_number.replace(/^\D+/g, '') : "---";
 
-    useEffect(() => {
-        setMounted(true);
-    }, []);
+    const imminent = isImminent(flight);
+    const past = isPast(flight);
 
-
-
-    useEffect(() => {
-        // Extract number from flight.flight_number string (e.g. "EK123" -> "123")
-        // If it's just "123", use it. If "EK123", strip EK. 
-        // Or just use the prop if it's already formatted. 
-        // The previous code generated a random number, but the prop has flight_number.
-        // Let's try to use the prop if available, else random fallback.
-        if (flight.flight_number) {
-            setFlightNumber(flight.flight_number.replace(/^\D+/g, ''));
-        } else {
-            setFlightNumber((Math.floor(Math.random() * 900) + 100).toString());
-        }
-    }, [flight.flight_number]);
-
-    // Determine status and style
-    const now = new Date();
-    const departure = new Date(flight.departure_time);
-    const arrival = new Date(flight.arrival_time);
-    const timeDiff = departure.getTime() - now.getTime();
-    const hoursUntil = timeDiff / (1000 * 60 * 60);
-
-    const isImminent = hoursUntil < 24 && hoursUntil > 0;
-    const isPast = arrival.getTime() < now.getTime();
-
-    // Live Active State - White Hue
-    const internalStatusColor = isActive
+    // Live active state gets a brighter, glowing treatment.
+    const statusColor = isActive
         ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.4)] border-white/60 bg-white/10"
-        : (isImminent ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.2)] border-white/40 bg-white/5" : "border-white/5");
-
-    const statusColor = internalStatusColor;
-
-    // Format helpers
-    const formatDate = (isoString: string) => {
-        const date = new Date(isoString);
-        if (isNaN(date.getTime())) return "---";
-        // Use UTC to preserve the exact date entered regardless of user's timezone
-        return date.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric', timeZone: 'UTC' }).toUpperCase().replace(',', '');
-    };
-
-    const formatTime = (isoString: string) => {
-        const date = new Date(isoString);
-        if (isNaN(date.getTime())) return "--:--";
-        // Use UTC to preserve the exact time entered regardless of user's timezone
-        return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' });
-    };
+        : (imminent ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.2)] border-white/40 bg-white/5" : "border-white/5");
 
     const handleDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (isConfirmingDelete) {
             onDelete?.(flight.id);
-            // Optional: reset state, though component might unmount
             setIsConfirmingDelete(false);
         } else {
             setIsConfirmingDelete(true);
@@ -95,21 +46,27 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         }
     };
 
-    const toggleShift = () => {
+    const activate = () => {
         if (isActive) {
-            // Open FlightAware
-            window.open(`https://www.flightaware.com/live/flight/UAE${flightNumber}`, '_blank');
+            window.open(`https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`, '_blank');
             return;
         }
-
-        // Reset delete confirmation when closing (if it was open)
         if (isShifted) {
             setIsConfirmingDelete(false);
         }
-        if (onToggleShift) {
-            onToggleShift();
+        onToggleShift?.();
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            activate();
         }
     };
+
+    const actionLabel = isActive
+        ? `Open live tracking for flight ${AIRLINE_CODE}${flightNumber}`
+        : `${isShifted ? "Hide" : "Show"} actions for ${flight.origin_code} to ${flight.destination_code}`;
 
     return (
         <div className="relative w-full max-w-sm group h-44">
@@ -123,12 +80,13 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         x: isShifted ? 0 : 20
                     }}
                     transition={{
-                        // Open: Wait strictly for card to finish (0.6s). Close: Hide immediately (0s).
                         delay: isShifted ? 0.6 : 0,
                         type: "spring", stiffness: 400, damping: 35
                     }}
                     onClick={handleEdit}
-                    className="w-12 h-12 rounded-full flex items-center justify-center bg-black/40 backdrop-blur-md border border-white/10 text-white hover:bg-white/10 transition-all"
+                    aria-label={`Edit flight ${flight.origin_code} to ${flight.destination_code}`}
+                    tabIndex={isShifted ? 0 : -1}
+                    className="w-12 h-12 rounded-full flex items-center justify-center bg-black/40 backdrop-blur-md border border-white/10 text-white hover:bg-white/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
                     {isConfirmingDelete ? <X size={18} /> : <Edit size={18} />}
                 </motion.button>
@@ -141,14 +99,14 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         backgroundColor: isConfirmingDelete ? "rgba(239, 68, 68, 0.8)" : "rgba(0, 0, 0, 0.4)"
                     }}
                     transition={{
-                        // Open: Stagger slightly after edit (0.65s). Close: Hide immediately (0s).
                         delay: isShifted ? 0.65 : 0,
                         type: "spring", stiffness: 400, damping: 35
                     }}
                     onClick={handleDelete}
+                    aria-label={isConfirmingDelete ? "Confirm delete flight" : `Delete flight ${flight.origin_code} to ${flight.destination_code}`}
+                    tabIndex={isShifted ? 0 : -1}
                     className={cn(
-                        "w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 text-white transition-all",
-                        // Hover state handled by motion animate for bg, but adding hover for non-motion props if needed
+                        "w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                         !isConfirmingDelete && "hover:bg-white/10",
                         isConfirmingDelete && "hover:bg-red-600/90 border-red-400/50"
                     )}
@@ -159,23 +117,24 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
 
             {/* Main Card Layer */}
             <motion.div
+                role="button"
+                tabIndex={0}
+                aria-label={actionLabel}
                 animate={{ x: isShifted ? -140 : 0 }}
                 transition={{
                     type: "spring", stiffness: 500, damping: 40,
-                    // Open: Move immediately (0s). Close: Wait for buttons to hide (0.1s).
                     delay: isShifted ? 0 : 0.1
                 }}
-                onClick={toggleShift}
+                onClick={activate}
+                onKeyDown={handleKeyDown}
                 className={cn(
-                    "relative w-full h-full glass rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col",
+                    "relative w-full h-full glass rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                     statusColor,
-                    isImminent && "animate-pulse-slow",
-                    // Remove shadow when shifted to prevent artifact over buttons
+                    imminent && "animate-pulse-slow",
                     isShifted && "shadow-none"
                 )}
                 whileTap={{ scale: 0.98 }}
             >
-                {/* Content */}
                 <div className="flex-1 p-5 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
 
                     {/* LEFT: Origin */}
@@ -185,15 +144,14 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             <span className="text-[10px] text-white/50 uppercase tracking-[0.15em] font-bold block mt-1 leading-tight break-words">{flight.origin_city}</span>
                         </div>
                         <div>
-                            <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatDate(flight.departure_time)}</span>
-                            <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatTime(flight.departure_time)}</span>
+                            <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.departure_time)}</span>
+                            <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.departure_time)}</span>
                         </div>
                     </div>
 
-                    {/* CENTER: Flight Info (Dead Center) */}
+                    {/* CENTER: Flight Info */}
                     <div className="absolute inset-0 flex flex-col items-center justify-center z-0 pointer-events-none">
                         <div className="flex flex-col items-center justify-center">
-                            {/* LIVE Indicator */}
                             <AnimatePresence>
                                 {isActive && (
                                     <motion.div
@@ -210,12 +168,11 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
 
                             <div className="flex items-center gap-1.5 mb-2">
                                 <Plane size={14} className="text-white fill-white rotate-45" />
-                                <span className="text-lg font-black text-white tracking-tight">EK{flightNumber}</span>
+                                <span className="text-lg font-black text-white tracking-tight">{AIRLINE_CODE}{flightNumber}</span>
                             </div>
 
-                            {/* Animated / Solid Line */}
                             <div className="w-24 h-[1px] bg-white/10 overflow-hidden relative">
-                                {!isPast ? (
+                                {!past ? (
                                     <motion.div
                                         className="absolute inset-y-0 left-0 w-1/3 bg-white/60 blur-[1px]"
                                         animate={{ x: ["-100%", "300%"] }}
@@ -235,8 +192,8 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             <span className="text-[10px] text-white/50 uppercase tracking-[0.15em] font-bold block mt-1 leading-tight break-words">{flight.destination_city}</span>
                         </div>
                         <div>
-                            <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatDate(flight.arrival_time)}</span>
-                            <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatTime(flight.arrival_time)}</span>
+                            <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.arrival_time)}</span>
+                            <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.arrival_time)}</span>
                         </div>
                     </div>
 

@@ -24,7 +24,6 @@ export default function GlobalPulse({
     onTogglePersona,
     isLoading = false,
 }: GlobalPulseProps) {
-    const [mounted, setMounted] = useState(false);
     const [now, setNow] = useState<Date | null>(null);
 
     // Determine background color based on current location
@@ -45,18 +44,13 @@ export default function GlobalPulse({
     const iconColor = textColor === "#000000" ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)";
 
 
-    // Update clocks every second for better precision, though minute is fine
-    // Use effect to handle mounting state
+    // Live clock. `now` starts null (so SSR and first client paint match), then
+    // ticks every second once mounted. Seeding/ticking happen via a callback,
+    // not a synchronous setState in the effect body.
     useEffect(() => {
-        setMounted(true);
-        setNow(new Date());
-    }, []);
-
-    // Update clocks every second
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setNow(new Date());
-        }, 1000);
+        const update = () => setNow(new Date());
+        update();
+        const timer = setInterval(update, 1000);
         return () => clearInterval(timer);
     }, []);
 
@@ -172,7 +166,7 @@ export default function GlobalPulse({
                             className="text-8xl font-medium tracking-tighter leading-none"
                             style={{ color: textColor }}
                         >
-                            {mounted ? (persona === "plane" ? formatTime(faTimezone) : formatTime(partnerTimezone)) : "--:--"}
+                            {persona === "plane" ? formatTime(faTimezone) : formatTime(partnerTimezone)}
                         </h1>
 
                         {/* Date */}
@@ -180,7 +174,7 @@ export default function GlobalPulse({
                             className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
                             style={{ color: subTextColor }}
                         >
-                            {mounted ? (
+                            {now ? (
                                 <>
                                     {persona === "plane" ? formatDate(faTimezone) : formatDate(partnerTimezone)}
                                     <span className="opacity-50">•</span>
@@ -213,7 +207,7 @@ export default function GlobalPulse({
                         className="text-xs font-bold"
                         style={{ color: textColor }}
                     >
-                        {mounted ? (persona === "plane" ? formatTime(partnerTimezone) : formatTime(faTimezone)) : "--:--"}
+                        {persona === "plane" ? formatTime(partnerTimezone) : formatTime(faTimezone)}
                     </span>
                     <span
                         className="text-[9px] font-bold tracking-wider"
