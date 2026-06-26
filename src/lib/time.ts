@@ -1,4 +1,4 @@
-import { fromZonedTime } from "date-fns-tz";
+import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
 import { Flight } from "@/types";
 import { getAirportTimezone } from "@/data/airports";
 import { HOME_HUB_CODE } from "@/lib/config";
@@ -38,6 +38,20 @@ export function normalizeWallClock(value: string): string {
 /** Convert a local wall-clock at the given airport into an absolute UTC instant. */
 export function toInstant(wallClock: string, code: string): Date {
   return fromZonedTime(normalizeWallClock(wallClock), getAirportTimezone(code));
+}
+
+/** Convert an absolute instant (UTC ISO) into canonical wall-clock in an IANA zone. */
+export function instantToWallClockTz(utcIso: string, ianaTz: string): string {
+  return formatInTimeZone(new Date(utcIso), ianaTz, "yyyy-MM-dd'T'HH:mm");
+}
+
+/**
+ * Convert an absolute instant (UTC ISO string, e.g. from AeroAPI) into the
+ * canonical local wall-clock ("YYYY-MM-DDTHH:mm") at the given airport. Inverse
+ * of {@link toInstant}.
+ */
+export function instantToWallClock(utcIso: string, code: string): string {
+  return instantToWallClockTz(utcIso, getAirportTimezone(code));
 }
 
 export function departureInstant(flight: Flight): Date {

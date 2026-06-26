@@ -37,6 +37,15 @@ async function migrate(db: Client): Promise<void> {
     )
   `);
 
+  // Generic TTL cache for AeroAPI responses (keeps us within rate/billing limits).
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS aeroapi_cache (
+      cache_key TEXT PRIMARY KEY,
+      payload TEXT NOT NULL,
+      fetched_at TEXT NOT NULL
+    )
+  `);
+
   // Seed demo data only when the table is empty.
   const count = await db.execute('SELECT COUNT(*) as c FROM flights');
   if (Number(count.rows[0].c) === 0) {

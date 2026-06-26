@@ -24,3 +24,12 @@ export const PARTNER_CITY = "Montreal";
  * lands, only `getUserId()` (see API routes) needs to change.
  */
 export const DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Build an AeroAPI ident (ICAO designator) from a stored flight number.
+ * e.g. "EK123" or "123" -> "UAE123". A multi-airline IATA->ICAO map is future work.
+ */
+export function toAeroIdent(flightNumber: string): string {
+  const digits = flightNumber.replace(/\D/g, "");
+  return `${FLIGHTAWARE_CARRIER}${digits}`;
+}
