@@ -2,10 +2,10 @@ import type { CanvasTexture, MeshStandardMaterial } from "three";
 
 const MASK_URL = "/textures/earth-water.png";
 
-const LAND_ALPHA = 195;
+const LAND_ALPHA = 235;
 const WATER_ALPHA = 0;
-const LAND_COLOR = { r: 235, g: 235, b: 235 };
-const BLUR_RADIUS = 4;
+const LAND_COLOR = { r: 248, g: 248, b: 248 };
+const BLUR_RADIUS = 1;
 
 function smoothstep(edge0: number, edge1: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
@@ -47,7 +47,7 @@ function processMaskImageData(imageData: ImageData) {
 
   for (let i = 0; i < data.length; i += 4) {
     const luminance = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    const landFactor = 1 - smoothstep(80, 180, luminance);
+    const landFactor = 1 - smoothstep(115, 145, luminance);
     const alpha = Math.round(WATER_ALPHA + landFactor * (LAND_ALPHA - WATER_ALPHA));
 
     data[i] = LAND_COLOR.r;
