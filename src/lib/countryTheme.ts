@@ -51,29 +51,10 @@ function deriveFallbackPalette(flagColor: string): FlagPalette {
 function pickAccent(sourceColors: string[], override?: string): string {
     if (override) return override;
 
-    let best = sourceColors[0] ?? DEFAULT_ACCENT;
-    let bestScore = -1;
+    const chromatic = uniqueColors(sourceColors).filter((c) => !isNeutralFlagColor(c));
+    if (chromatic.length > 0) return chromatic[0];
 
-    for (const color of sourceColors) {
-        const luminance = getLuminanceFromHex(color);
-        if (luminance < 0.12 || luminance > 0.92) continue;
-
-        const saturationProxy = Math.max(hexToChannelSpread(color), 0);
-        const score = saturationProxy * (1 - Math.abs(luminance - 0.45));
-        if (score > bestScore) {
-            bestScore = score;
-            best = color;
-        }
-    }
-
-    return best;
-}
-
-function hexToChannelSpread(hex: string): number {
-    const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    if (!match) return 0;
-    const channels = [parseInt(match[1], 16), parseInt(match[2], 16), parseInt(match[3], 16)];
-    return Math.max(...channels) - Math.min(...channels);
+    return sourceColors[0] ?? DEFAULT_ACCENT;
 }
 
 function tintedNeutralWash(chromatic: string[]): string {
@@ -153,6 +134,12 @@ function buildTheme(countryIso: string, palette: FlagPalette): CountryTheme {
     const contentVeil = computeContentVeil(washColors);
 
     const accent = pickAccent(sourceColors, palette.accent);
+    const chromeColor = accent;
+    const atmosphereColor = blendHex(
+        washColors[0],
+        washColors[1] ?? washColors[0],
+        0.5
+    );
     const effectiveBg = getEffectiveBackground(washColors, contentVeil);
     const baseTint = blendHex(LIGHT_BASE, washColors[0], 0.18);
     const themeColor = blendHex(LIGHT_BASE, washColors[1] ?? washColors[0], 0.38);
@@ -165,6 +152,8 @@ function buildTheme(countryIso: string, palette: FlagPalette): CountryTheme {
         sourceColors,
         washColors,
         accent,
+        chromeColor,
+        atmosphereColor,
         themeColor,
         effectiveBg,
         baseTint,
@@ -194,5 +183,5 @@ export function getCountryTheme(airportCode: string): CountryTheme {
 }
 
 export function getAirportColor(code: string): string {
-    return getCountryTheme(code).accent;
+    return getCountryTheme(code).chromeColor;
 }

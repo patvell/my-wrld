@@ -14,10 +14,10 @@ interface PillMenuProps {
     activeTab: "home" | "history" | "settings" | "world";
     onTabChange: (tab: "home" | "history" | "settings" | "world") => void;
     onAddClick: () => void;
-    primaryColor: string;
+    chromeColor: string;
 }
 
-export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryColor }: PillMenuProps) {
+export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeColor }: PillMenuProps) {
     const tabs = [
         { id: "world", icon: Globe, label: "World" },
         { id: "home", icon: Compass, label: "Journey" },
@@ -54,7 +54,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryCo
                     whileTap={{ scale: 0.9 }}
                     onClick={onAddClick}
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110 transition-colors duration-[3000ms]"
-                    style={{ backgroundColor: primaryColor }}
+                    style={{ backgroundColor: chromeColor }}
                 >
                     <Plus size={20} />
                 </motion.button>

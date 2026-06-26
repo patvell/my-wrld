@@ -18,6 +18,10 @@ export interface CountryTheme {
     sourceColors: string[];
     washColors: string[];
     accent: string;
+    /** Saturated country color for UI chrome (buttons, etc.) */
+    chromeColor: string;
+    /** Soft wash blend for globe atmosphere */
+    atmosphereColor: string;
     themeColor: string;
     effectiveBg: string;
     baseTint: string;

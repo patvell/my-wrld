@@ -9,7 +9,7 @@ const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
 interface WorldGlobeProps {
   flights: Flight[];
-  primaryColor: string;
+  atmosphereColor: string;
 }
 
 interface ArcDatum {
@@ -36,7 +36,7 @@ function isFlightPast(flight: Flight): boolean {
   return new Date() >= twoHoursAfter;
 }
 
-export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
+export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
   const globeRef = useRef<any>(null);
   const [dimensions, setDimensions] = useState({ width: 390, height: 844 });
   const [customMaterial, setCustomMaterial] = useState<any>(null);
@@ -223,8 +223,8 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
           globeMaterial={customMaterial}
           showGraticules={true}
           showAtmosphere={true}
-          atmosphereColor={primaryColor}
-          atmosphereAltitude={0.25}
+          atmosphereColor={atmosphereColor}
+          atmosphereAltitude={0.11}
           onGlobeReady={handleGlobeReady}
           onGlobeClick={handleGlobeClick}
           onZoom={handleInteraction}

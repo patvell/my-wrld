@@ -436,7 +436,7 @@ export default function Home() {
               className="absolute inset-0 w-full h-full flex flex-col"
             >
                {/* Globe will go here */}
-               <WorldGlobe flights={flights} primaryColor={countryTheme.accent} />
+               <WorldGlobe flights={flights} atmosphereColor={countryTheme.atmosphereColor} />
             </motion.div>
           ) : activeTab === "home" ? (
             <motion.div
@@ -609,7 +609,7 @@ export default function Home() {
             activeTab={activeTab === "settings" ? "home" : activeTab}
             onTabChange={handleTabChange}
             onAddClick={() => setIsAddModalOpen(true)}
-            primaryColor={countryTheme.accent}
+            chromeColor={countryTheme.chromeColor}
           />
         </div>
       </div>
