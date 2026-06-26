@@ -6,7 +6,7 @@ import { X, Calendar, Plane, Clock, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
 import { Flight, FlightInput } from "@/types";
-import { normalizeWallClock } from "@/lib/time";
+import { normalizeWallClock, toInstant } from "@/lib/time";
 import { daySpan } from "@/lib/aeroMapper";
 import { AIRLINE_CODE } from "@/lib/config";
 
@@ -257,9 +257,11 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         const originData = AIRPORTS[origin.toUpperCase()];
         const destData = AIRPORTS[destination.toUpperCase()];
 
-        // Note: Dates/Times are stored as ISO strings but conceptually represent
-        // the local time at the respective airport, as per requirement.
-        // We will likely need a helper to calculate duration or convert for global comparison later.
+        // Times are stored as local wall-clock at each airport. Classify the
+        // flight as past/upcoming from its actual departure instant (not the tab
+        // it was opened from) so historic flights can be logged from anywhere.
+        const departureWallClock = `${originDate}T${originTime}`;
+        const hasDeparted = toInstant(departureWallClock, origin.toUpperCase()).getTime() < Date.now();
 
         onAdd({
             origin_code: origin.toUpperCase(),
@@ -267,16 +269,13 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             destination_code: destination.toUpperCase(),
             destination_city: destData.city,
             flight_number: `${AIRLINE_CODE}${flightNum}`,
-            departure_time: `${originDate}T${originTime}`, // canonical wall-clock (local to origin)
-            arrival_time: `${destDate}T${destTime}`,       // canonical wall-clock (local to destination)
-            status: isHistoryMode ? "completed" : "scheduled",
-            type: isHistoryMode ? "past" : "future",
+            departure_time: departureWallClock, // canonical wall-clock (local to origin)
+            arrival_time: `${destDate}T${destTime}`, // canonical wall-clock (local to destination)
+            status: hasDeparted ? "completed" : "scheduled",
+            type: hasDeparted ? "past" : "future",
         });
         onClose();
     };
-
-    // Date Restrictions
-    const today = new Date().toISOString().split('T')[0];
 
     return (
         <AnimatePresence>
@@ -401,8 +400,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     id="origin-date"
                                                     type="date"
                                                     value={originDate}
-                                                    min={!isHistoryMode ? today : undefined}
-                                                    max={isHistoryMode ? today : undefined}
                                                     onChange={(e) => handleOriginDateChange(e.target.value)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
                                                     required
