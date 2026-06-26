@@ -94,9 +94,9 @@ export function pastelizeHex(hex: string, whiteMix = 0.75): string {
     return desaturateHex(washed, 0.1);
 }
 
-/** Richer pastel for background washes — more color, still light. */
+/** Richer pastel for background washes — light but visibly tinted. */
 export function pastelizeForBackground(hex: string): string {
-    return pastelizeHex(hex, 0.58);
+    return pastelizeHex(hex, 0.64);
 }
 
 export function darkenHex(hex: string, amount: number): string {
@@ -114,6 +114,20 @@ export function isNeutralFlagColor(hex: string): boolean {
     return lum > 0.88 || spread < 18;
 }
 
+export function hexToRgba(hex: string, alpha: number): string {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return `rgba(248, 246, 243, ${alpha})`;
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+}
+
+export function getColorIntensity(hex: string): number {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return 0;
+    const max = Math.max(rgb.r, rgb.g, rgb.b);
+    const min = Math.min(rgb.r, rgb.g, rgb.b);
+    return (max - min) / 255;
+}
+
 export function blendHex(a: string, b: string, ratio: number): string {
     const rgbA = hexToRgb(a);
     const rgbB = hexToRgb(b);
@@ -128,13 +142,13 @@ export function blendHex(a: string, b: string, ratio: number): string {
 
 const LIGHT_BASE = "#F8F6F3";
 
-/** Approximate the perceived background after layering pastel washes on off-white. */
-export function getEffectiveBackground(washColors: string[]): string {
+/** Approximate perceived background at the content zone after mesh layers + veil. */
+export function getEffectiveBackground(washColors: string[], contentVeil = 0.44): string {
     if (washColors.length === 0) return LIGHT_BASE;
 
     let blended = LIGHT_BASE;
     for (const color of washColors) {
-        blended = blendHex(blended, color, 0.32);
+        blended = blendHex(blended, color, 0.24);
     }
-    return blended;
+    return blendHex(blended, LIGHT_BASE, contentVeil);
 }

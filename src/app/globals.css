@@ -88,16 +88,21 @@ body {
       transform: translate(0, 0) scale(1);
     }
 
-    33% {
-      transform: translate(1.5%, -1%) scale(1.03);
+    25% {
+      transform: translate(2%, -1.5%) scale(1.04);
     }
 
-    66% {
-      transform: translate(-1%, 1.5%) scale(0.98);
+    50% {
+      transform: translate(-1.5%, 2%) scale(0.97);
+    }
+
+    75% {
+      transform: translate(1%, 1%) scale(1.02);
     }
   }
 
   .liquid-blob {
     animation: liquid-drift 24s ease-in-out infinite;
+    will-change: transform;
   }
 }

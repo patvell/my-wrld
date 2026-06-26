@@ -3,6 +3,16 @@ export interface FlagPalette {
     accent?: string;
 }
 
+export interface LiquidBlobConfig {
+    color: string;
+    top: number;
+    left: number;
+    size: number;
+    opacity: number;
+    duration: number;
+    delay: number;
+}
+
 export interface CountryTheme {
     countryIso: string;
     sourceColors: string[];
@@ -10,8 +20,10 @@ export interface CountryTheme {
     accent: string;
     themeColor: string;
     effectiveBg: string;
-    /** Unique gradient angle per country (degrees). */
+    baseTint: string;
     gradientAngle: number;
-    /** Per-blob position offsets (percent) derived from country code. */
-    blobOffsets: { top: number; left: number }[];
+    secondaryAngle: number;
+    blobConfigs: LiquidBlobConfig[];
+    /** 0–1 white veil strength over the content zone for legibility */
+    contentVeil: number;
 }
