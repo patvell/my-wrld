@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
+import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 
 /** Syncs theme color with browser chrome and CSS variables. */
 export function useThemeColor(color: string) {
     useEffect(() => {
         if (typeof document === "undefined") return;
+
+        document.documentElement.style.setProperty(
+            "--theme-transition",
+            PLACE_TRANSITION_CSS
+        );
 
         let metaThemeColor = document.querySelector(
             'meta[name="theme-color"]'

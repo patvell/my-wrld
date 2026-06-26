@@ -5,6 +5,7 @@ import { Plane, Home } from "lucide-react";
 import { getAirportTimezone, AIRPORTS } from "@/data/airports";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { getReadableTextColors } from "@/lib/colors";
+import { PERSONA_SPRING, PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -80,11 +81,16 @@ export default function GlobalPulse({
         return `${sign}${diffHours}HR`;
     };
 
+    const colorTransition = { transition: `color ${PLACE_TRANSITION_CSS}` };
+
     const bigTz = persona === "plane" ? faTimezone : partnerTimezone;
     const smallTz = persona === "plane" ? partnerTimezone : faTimezone;
 
     return (
-        <div className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 transition-colors duration-1000 overflow-hidden pointer-events-none">
+        <div
+            className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
+            style={{ transition: `color ${PLACE_TRANSITION_CSS}` }}
+        >
             <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
                 <AnimatePresence mode="wait">
                     <motion.div
@@ -92,18 +98,18 @@ export default function GlobalPulse({
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        transition={PERSONA_SPRING}
                         className="flex flex-col items-center"
                     >
                         <div className="flex items-center gap-2 mb-2">
                             {persona === "plane" ? (
-                                <Plane size={14} style={{ color: iconColor }} />
+                                <Plane size={14} style={{ color: iconColor, ...colorTransition }} />
                             ) : (
-                                <Home size={14} style={{ color: iconColor }} />
+                                <Home size={14} style={{ color: iconColor, ...colorTransition }} />
                             )}
                             <span
                                 className="text-[10px] font-bold tracking-[0.2em] uppercase"
-                                style={{ color: iconColor }}
+                                style={{ color: iconColor, ...colorTransition }}
                             >
                                 {isLoading ? (
                                     <div className="h-[10px] w-24 bg-white/10 rounded animate-shimmer" />
@@ -125,13 +131,13 @@ export default function GlobalPulse({
                                 <>
                                     <span
                                         className="text-2xl font-bold tracking-tight"
-                                        style={{ color: textColor }}
+                                        style={{ color: textColor, ...colorTransition }}
                                     >
                                         {persona === "plane" ? faCode : partnerCode}
                                     </span>
                                     <span
                                         className="text-lg font-medium tracking-wide"
-                                        style={{ color: subTextColor }}
+                                        style={{ color: subTextColor, ...colorTransition }}
                                     >
                                         {persona === "plane"
                                             ? AIRPORTS[faCode]?.countryIso
@@ -149,6 +155,7 @@ export default function GlobalPulse({
                             className="text-8xl font-medium tracking-tighter leading-none"
                             style={{
                                 color: textColor,
+                                ...colorTransition,
                                 textShadow: useFrostedChrome
                                     ? "0 1px 2px rgba(255,255,255,0.9), 0 0 40px rgba(255,255,255,0.5)"
                                     : "0 2px 12px rgba(0,0,0,0.25)",
@@ -163,7 +170,7 @@ export default function GlobalPulse({
 
                         <span
                             className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
-                            style={{ color: subTextColor }}
+                            style={{ color: subTextColor, ...colorTransition }}
                         >
                             {mounted ? (
                                 <>
@@ -187,12 +194,15 @@ export default function GlobalPulse({
                 whileTap={{ scale: 0.95 }}
                 onClick={onTogglePersona}
                 className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10"
-                style={{ borderColor: useFrostedChrome ? "rgba(255,255,255,0.15)" : subTextColor }}
+                style={{
+                    borderColor: useFrostedChrome ? "rgba(255,255,255,0.15)" : subTextColor,
+                    transition: `color ${PLACE_TRANSITION_CSS}, border-color ${PLACE_TRANSITION_CSS}`,
+                }}
             >
                 <div className="flex flex-col items-end">
                     <span
                         className="text-xs font-bold"
-                        style={{ color: useFrostedChrome ? onFrosted : textColor }}
+                        style={{ color: useFrostedChrome ? onFrosted : textColor, ...colorTransition }}
                     >
                         {mounted
                             ? persona === "plane"
@@ -204,6 +214,7 @@ export default function GlobalPulse({
                         className="text-[9px] font-bold tracking-wider"
                         style={{
                             color: useFrostedChrome ? "rgba(255,255,255,0.65)" : subTextColor,
+                            ...colorTransition,
                         }}
                     >
                         {persona === "plane" ? partnerCode : faCode}
@@ -214,7 +225,7 @@ export default function GlobalPulse({
 
                 <div
                     className="flex items-center justify-center transition-colors"
-                    style={{ color: useFrostedChrome ? onFrosted : iconColor }}
+                    style={{ color: useFrostedChrome ? onFrosted : iconColor, ...colorTransition }}
                 >
                     {persona === "plane" ? <Home size={18} /> : <Plane size={18} />}
                 </div>

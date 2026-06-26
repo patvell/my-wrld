@@ -13,6 +13,7 @@ import { getAirportTimezone } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
+import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -353,6 +354,7 @@ export default function Home() {
         "h-[100dvh] min-h-[100dvh] w-full font-sans selection:bg-emirates-red/30 relative overflow-hidden flex flex-col",
         isLightBg ? "text-neutral-900" : "text-white"
       )}
+      style={{ transition: `color ${PLACE_TRANSITION_CSS}` }}
     >
       {/* Full Screen Background */}
       <LiquidBackground theme={countryTheme} />
