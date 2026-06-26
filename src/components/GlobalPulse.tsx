@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
 import { getAirportTimezone, AIRPORTS } from "@/data/airports";
-import { getCountryTheme } from "@/lib/countryTheme";
 import { getReadableTextColors } from "@/lib/colors";
+import { CountryTheme } from "@/types/countryTheme";
+import { THEME_TRANSITION_STYLE } from "@/lib/themeTransition";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -14,6 +15,7 @@ interface GlobalPulseProps {
     persona: PersonaMode;
     onTogglePersona: () => void;
     isLoading?: boolean;
+    countryTheme: CountryTheme;
 }
 
 export default function GlobalPulse({
@@ -24,16 +26,15 @@ export default function GlobalPulse({
     persona,
     onTogglePersona,
     isLoading = false,
+    countryTheme,
 }: GlobalPulseProps) {
     const [mounted, setMounted] = useState(false);
     const [now, setNow] = useState<Date | null>(null);
 
-    // Determine background color based on current location
-    const currentLocationCode = persona === "home" ? partnerCode : faCode;
-    const countryTheme = getCountryTheme(currentLocationCode);
     const readable = getReadableTextColors(countryTheme.effectiveBg);
     const { primary: textColor, secondary: subTextColor, muted: iconColor, onFrosted } = readable;
     const useFrostedChrome = readable.primary === "#171717";
+    const colorTransition = { transition: `color ${THEME_TRANSITION_STYLE}` };
 
     const partnerTimezone = getAirportTimezone(partnerCode);
     const faTimezone = getAirportTimezone(faCode);
@@ -116,13 +117,13 @@ export default function GlobalPulse({
                         {/* Status Label */}
                         <div className="flex items-center gap-2 mb-2">
                             {persona === "plane" ? (
-                                <Plane size={14} style={{ color: iconColor }} />
+                                <Plane size={14} style={{ color: iconColor, ...colorTransition }} />
                             ) : (
-                                <Home size={14} style={{ color: iconColor }} />
+                                <Home size={14} style={{ color: iconColor, ...colorTransition }} />
                             )}
                             <span
                                 className="text-[10px] font-bold tracking-[0.2em] uppercase"
-                                style={{ color: iconColor }}
+                                style={{ color: iconColor, ...colorTransition }}
                             >
                                 {isLoading ? (
                                     <div className="h-[10px] w-24 bg-white/10 rounded animate-shimmer" />
@@ -143,13 +144,13 @@ export default function GlobalPulse({
                                 <>
                                     <span
                                         className="text-2xl font-bold tracking-tight"
-                                        style={{ color: textColor }}
+                                        style={{ color: textColor, ...colorTransition }}
                                     >
                                         {persona === "plane" ? faCode : partnerCode}
                                     </span>
                                     <span
                                         className="text-lg font-medium tracking-wide"
-                                        style={{ color: subTextColor }}
+                                        style={{ color: subTextColor, ...colorTransition }}
                                     >
                                         {persona === "plane"
                                             ? (AIRPORTS[faCode]?.countryIso ? `${faCity.toUpperCase()}, ${AIRPORTS[faCode].countryIso}` : faCity.toUpperCase())
@@ -166,6 +167,7 @@ export default function GlobalPulse({
                             className="text-8xl font-medium tracking-tighter leading-none"
                             style={{
                                 color: textColor,
+                                ...colorTransition,
                                 textShadow: useFrostedChrome
                                     ? "0 1px 2px rgba(255,255,255,0.9), 0 0 40px rgba(255,255,255,0.5)"
                                     : "0 2px 12px rgba(0,0,0,0.25)",
@@ -177,7 +179,7 @@ export default function GlobalPulse({
                         {/* Date */}
                         <span
                             className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
-                            style={{ color: subTextColor }}
+                            style={{ color: subTextColor, ...colorTransition }}
                         >
                             {mounted ? (
                                 <>
@@ -210,13 +212,13 @@ export default function GlobalPulse({
                 <div className="flex flex-col items-end">
                     <span
                         className="text-xs font-bold"
-                        style={{ color: useFrostedChrome ? onFrosted : textColor }}
+                        style={{ color: useFrostedChrome ? onFrosted : textColor, ...colorTransition }}
                     >
                         {mounted ? (persona === "plane" ? formatTime(partnerTimezone) : formatTime(faTimezone)) : "--:--"}
                     </span>
                     <span
                         className="text-[9px] font-bold tracking-wider"
-                        style={{ color: useFrostedChrome ? "rgba(255,255,255,0.65)" : subTextColor }}
+                        style={{ color: useFrostedChrome ? "rgba(255,255,255,0.65)" : subTextColor, ...colorTransition }}
                     >
                         {persona === "plane" ? partnerCode : faCode}
                     </span>
@@ -226,7 +228,7 @@ export default function GlobalPulse({
 
                 <div
                     className="flex items-center justify-center transition-colors"
-                    style={{ color: useFrostedChrome ? onFrosted : iconColor }}
+                    style={{ color: useFrostedChrome ? onFrosted : iconColor, ...colorTransition }}
                 >
                     {persona === "plane" ? (
                         <Home size={18} />

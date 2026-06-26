@@ -142,13 +142,13 @@ export function blendHex(a: string, b: string, ratio: number): string {
 
 const LIGHT_BASE = "#F8F6F3";
 
-/** Approximate perceived background at the content zone after mesh layers + veil. */
+/** Approximate perceived background at the content zone (where clock/text sits). */
 export function getEffectiveBackground(washColors: string[], contentVeil = 0.44): string {
     if (washColors.length === 0) return LIGHT_BASE;
 
-    let blended = LIGHT_BASE;
-    for (const color of washColors) {
-        blended = blendHex(blended, color, 0.24);
-    }
-    return blendHex(blended, LIGHT_BASE, contentVeil);
+    let blended = blendHex(LIGHT_BASE, washColors[0], 0.12);
+    if (washColors[1]) blended = blendHex(blended, washColors[1], 0.14);
+    if (washColors[2]) blended = blendHex(blended, washColors[2], 0.1);
+
+    return blendHex(blended, LIGHT_BASE, contentVeil * 0.85);
 }

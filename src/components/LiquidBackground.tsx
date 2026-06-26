@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React from "react";
 import { CountryTheme } from "@/types/countryTheme";
 import { hexToRgba } from "@/lib/colors";
-import {
-    THEME_TRANSITION_MS,
-    THEME_TRANSITION_STYLE,
-} from "@/lib/themeTransition";
 
 interface LiquidBackgroundProps {
-    theme: CountryTheme;
+    fromTheme: CountryTheme;
+    toTheme: CountryTheme;
+    progress: number;
 }
 
 function BackgroundLayer({ theme }: { theme: CountryTheme }) {
@@ -18,10 +16,7 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
 
     return (
         <>
-            <div
-                className="absolute inset-0"
-                style={{ backgroundColor: theme.baseTint }}
-            />
+            <div className="absolute inset-0" style={{ backgroundColor: theme.baseTint }} />
 
             <div
                 className="absolute inset-0"
@@ -79,56 +74,26 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
     );
 }
 
-export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
-    const [baseTheme, setBaseTheme] = useState(theme);
-    const [overlayTheme, setOverlayTheme] = useState<CountryTheme | null>(null);
-    const [overlayVisible, setOverlayVisible] = useState(false);
-    const isFirstRender = useRef(true);
-
-    useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
-
-        if (theme.countryIso === baseTheme.countryIso) {
-            return;
-        }
-
-        setOverlayTheme(theme);
-        setOverlayVisible(false);
-
-        const startFade = requestAnimationFrame(() => {
-            requestAnimationFrame(() => setOverlayVisible(true));
-        });
-
-        const complete = window.setTimeout(() => {
-            setBaseTheme(theme);
-            setOverlayTheme(null);
-            setOverlayVisible(false);
-        }, THEME_TRANSITION_MS);
-
-        return () => {
-            cancelAnimationFrame(startFade);
-            window.clearTimeout(complete);
-        };
-    }, [theme, baseTheme.countryIso]);
+export default function LiquidBackground({
+    fromTheme,
+    toTheme,
+    progress,
+}: LiquidBackgroundProps) {
+    const isCrossfading = fromTheme.countryIso !== toTheme.countryIso;
+    const overlayOpacity = isCrossfading ? progress : 0;
 
     return (
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
             <div className="absolute inset-0">
-                <BackgroundLayer theme={baseTheme} />
+                <BackgroundLayer theme={fromTheme} />
             </div>
 
-            {overlayTheme && (
+            {isCrossfading && (
                 <div
                     className="absolute inset-0"
-                    style={{
-                        opacity: overlayVisible ? 1 : 0,
-                        transition: `opacity ${THEME_TRANSITION_STYLE}`,
-                    }}
+                    style={{ opacity: overlayOpacity }}
                 >
-                    <BackgroundLayer theme={overlayTheme} />
+                    <BackgroundLayer theme={toTheme} />
                 </div>
             )}
         </div>
