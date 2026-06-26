@@ -29,3 +29,10 @@ The `flights` table is created and seeded automatically on the first API request
 ## Notes
 - Flight times are stored as **local wall-clock at each airport** (`YYYY-MM-DDTHH:mm`); the airport's IANA timezone (from `src/data/airports.ts`) is used to derive absolute instants for "is it past / live now" logic. See `src/lib/time.ts`.
 - The app is single-tenant today but the data model and API are scoped by `user_id` so authentication can be added without a schema change (see `getUserId` in `src/lib/auth.ts`).
+
+## FlightAware AeroAPI (optional)
+Set `FLIGHTAWARE_API_KEY` to enable:
+- **Flight lookup/autofill:** in the Add Trip modal, enter a flight number + date and click "Look up flight" to prefill origin/destination/times (converted to each airport's local time).
+- **Live status:** active boarding passes show real status, progress, delays, and gate from AeroAPI.
+
+The key is read **server-side only** (see `src/lib/aeroapi.ts`); it is never sent to the browser. Calls are TTL-cached in an `aeroapi_cache` table and capped to `max_pages=1` to stay within the AeroAPI Personal tier. Without the key, these features are hidden and the app works normally.

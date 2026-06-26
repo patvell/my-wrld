@@ -3,6 +3,7 @@ import { Flight } from "@/types";
 import {
   normalizeWallClock,
   toInstant,
+  instantToWallClock,
   isPast,
   isActive,
   isLayoverBetween,
@@ -54,6 +55,23 @@ describe("toInstant", () => {
 
   it("handles half-hour offsets (Asia/Kolkata +5:30)", () => {
     expect(toInstant("2026-01-30T08:50", "BLR").toISOString()).toBe("2026-01-30T03:20:00.000Z");
+  });
+});
+
+describe("instantToWallClock", () => {
+  it("converts a UTC instant to the airport's local wall-clock", () => {
+    expect(instantToWallClock("2026-01-29T23:40:00Z", "DXB")).toBe("2026-01-30T03:40");
+    expect(instantToWallClock("2026-07-01T11:00:00Z", "LHR")).toBe("2026-07-01T12:00");
+  });
+
+  it("round-trips with toInstant across DST", () => {
+    for (const [wc, code] of [
+      ["2026-01-01T12:00", "LHR"],
+      ["2026-07-01T12:00", "LHR"],
+      ["2026-03-30T08:50", "BLR"],
+    ] as const) {
+      expect(instantToWallClock(toInstant(wc, code).toISOString(), code)).toBe(wc);
+    }
   });
 });
 
