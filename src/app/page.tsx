@@ -11,7 +11,7 @@ import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import { Flight, PersonaMode } from "@/types";
 import { getAirportTimezone } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
-import { useCountryThemeTransition } from "@/hooks/useCountryThemeTransition";
+import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
 import { THEME_TRANSITION_STYLE } from "@/lib/themeTransition";
 import { motion, AnimatePresence } from "framer-motion";
@@ -162,14 +162,9 @@ export default function Home() {
   const currentLocation = getCurrentLocation();
   const currentLocationCode = currentPersona === "home" ? "YUL" : currentLocation.code;
   const themeAirportCode = loading ? "YUL" : currentLocationCode;
-  const {
-    settledTheme,
-    targetTheme,
-    blendedTheme,
-    progress: themeProgress,
-  } = useCountryThemeTransition(themeAirportCode);
+  const countryTheme = getCountryTheme(themeAirportCode);
 
-  const isLightBg = isLightBackground(blendedTheme.effectiveBg);
+  const isLightBg = isLightBackground(countryTheme.effectiveBg);
   const textTransitionStyle = { transition: `color ${THEME_TRANSITION_STYLE}` };
   const mutedTextClass = isLightBg ? "text-neutral-700" : "text-white/70";
   const subtleTextClass = isLightBg ? "text-neutral-600" : "text-white/40";
@@ -348,7 +343,7 @@ export default function Home() {
   };
 
   // Sync background and theme-color with browser UI
-  useCountryThemeStyles(blendedTheme);
+  useCountryThemeStyles(countryTheme);
 
 
   return (
@@ -363,11 +358,7 @@ export default function Home() {
       style={textTransitionStyle}
     >
       {/* Full Screen Background */}
-      <LiquidBackground
-        fromTheme={settledTheme}
-        toTheme={targetTheme}
-        progress={themeProgress}
-      />
+      <LiquidBackground airportCode={themeAirportCode} />
 
       {/* Top Navigation / Clocks - Only visible on Home/Settings */}
       <AnimatePresence>
@@ -388,7 +379,7 @@ export default function Home() {
                 persona={currentPersona}
                 onTogglePersona={() => setCurrentPersona(prev => prev === "home" ? "plane" : "home")}
                 isLoading={loading}
-                countryTheme={blendedTheme}
+                countryTheme={countryTheme}
               />
             </div>
           </motion.div>
@@ -449,7 +440,7 @@ export default function Home() {
               className="absolute inset-0 w-full h-full flex flex-col"
             >
                {/* Globe will go here */}
-               <WorldGlobe flights={flights} atmosphereColor={blendedTheme.atmosphereColor} />
+               <WorldGlobe flights={flights} atmosphereColor={countryTheme.atmosphereColor} />
             </motion.div>
           ) : activeTab === "home" ? (
             <motion.div
@@ -622,7 +613,7 @@ export default function Home() {
             activeTab={activeTab === "settings" ? "home" : activeTab}
             onTabChange={handleTabChange}
             onAddClick={() => setIsAddModalOpen(true)}
-            chromeColor={blendedTheme.chromeColor}
+            chromeColor={countryTheme.chromeColor}
           />
         </div>
       </div>

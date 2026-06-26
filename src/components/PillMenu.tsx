@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { History, Plus, Compass, Globe } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { THEME_TRANSITION_STYLE } from "@/lib/themeTransition";
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -54,7 +55,10 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                     whileTap={{ scale: 0.9 }}
                     onClick={onAddClick}
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110"
-                    style={{ backgroundColor: chromeColor }}
+                    style={{
+                        backgroundColor: chromeColor,
+                        transition: `background-color ${THEME_TRANSITION_STYLE}`,
+                    }}
                 >
                     <Plus size={20} />
                 </motion.button>

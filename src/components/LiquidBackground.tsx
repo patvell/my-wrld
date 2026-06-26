@@ -1,13 +1,18 @@
 "use client";
 
-import React from "react";
-import { CountryTheme } from "@/types/countryTheme";
+import React, { useEffect, useRef, useState } from "react";
+import { animate } from "framer-motion";
+import { getCountryTheme } from "@/lib/countryTheme";
+import { lerpCountryTheme } from "@/lib/lerpCountryTheme";
 import { hexToRgba } from "@/lib/colors";
+import {
+    THEME_TRANSITION_MS,
+    THEME_TRANSITION_MOTION_EASE,
+} from "@/lib/themeTransition";
+import { CountryTheme } from "@/types/countryTheme";
 
 interface LiquidBackgroundProps {
-    fromTheme: CountryTheme;
-    toTheme: CountryTheme;
-    progress: number;
+    airportCode: string;
 }
 
 function BackgroundLayer({ theme }: { theme: CountryTheme }) {
@@ -74,11 +79,70 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
     );
 }
 
-export default function LiquidBackground({
-    fromTheme,
-    toTheme,
-    progress,
-}: LiquidBackgroundProps) {
+export default function LiquidBackground({ airportCode }: LiquidBackgroundProps) {
+    const targetTheme = getCountryTheme(airportCode);
+    const [fromTheme, setFromTheme] = useState(targetTheme);
+    const [toTheme, setToTheme] = useState(targetTheme);
+    const [progress, setProgress] = useState(1);
+
+    const settledCodeRef = useRef(airportCode);
+    const displayRef = useRef({
+        from: targetTheme,
+        to: targetTheme,
+        progress: 1,
+    });
+
+    useEffect(() => {
+        if (airportCode === settledCodeRef.current) {
+            return;
+        }
+
+        const nextTheme = getCountryTheme(airportCode);
+        const prevTheme = getCountryTheme(settledCodeRef.current);
+
+        if (prevTheme.countryIso === nextTheme.countryIso) {
+            settledCodeRef.current = airportCode;
+            displayRef.current = { from: nextTheme, to: nextTheme, progress: 1 };
+            setFromTheme(nextTheme);
+            setToTheme(nextTheme);
+            setProgress(1);
+            return;
+        }
+
+        const { from, to, progress: currentProgress } = displayRef.current;
+        const startFrom =
+            currentProgress < 1
+                ? lerpCountryTheme(from, to, currentProgress)
+                : prevTheme;
+
+        displayRef.current = { from: startFrom, to: nextTheme, progress: 0 };
+        setFromTheme(startFrom);
+        setToTheme(nextTheme);
+        setProgress(0);
+
+        const controls = animate(0, 1, {
+            duration: THEME_TRANSITION_MS / 1000,
+            ease: [...THEME_TRANSITION_MOTION_EASE],
+            onUpdate: (value) => {
+                displayRef.current.progress = value;
+                setProgress(value);
+            },
+            onComplete: () => {
+                settledCodeRef.current = airportCode;
+                displayRef.current = {
+                    from: nextTheme,
+                    to: nextTheme,
+                    progress: 1,
+                };
+                setFromTheme(nextTheme);
+                setToTheme(nextTheme);
+                setProgress(1);
+            },
+        });
+
+        return () => controls.stop();
+    }, [airportCode]);
+
     const isCrossfading = fromTheme.countryIso !== toTheme.countryIso;
     const overlayOpacity = isCrossfading ? progress : 0;
 
