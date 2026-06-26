@@ -8,255 +8,21 @@ import AddTripModal from "@/components/AddTripModal";
 import WorldGlobe from "@/components/WorldGlobe";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
-import { PlaceTransitionProvider } from "@/components/PlaceTransitionProvider";
 import { Flight, PersonaMode } from "@/types";
-import { CountryTheme } from "@/types/countryTheme";
 import { getAirportTimezone } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
-import { THEME_TRANSITION_STYLE } from "@/lib/themeTransition";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { History, ArrowUpDown, Undo2, Moon } from "lucide-react";
-import { useCountryThemeStyles } from "@/hooks/useThemeColor";
+import { useThemeColor } from "@/hooks/useThemeColor";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-interface FlightTabPanelsProps {
-  activeTab: "home" | "history" | "settings" | "world";
-  direction: number;
-  containerVariants: Variants;
-  cardVariants: Variants;
-  flights: Flight[];
-  loading: boolean;
-  upcomingJourneys: Flight[][];
-  pastJourneys: Flight[][];
-  activeOpenCardId: string | null;
-  countryTheme: CountryTheme;
-  handleDeleteTrip: (id: string) => void;
-  handleEditTrip: (id: string) => void;
-  handleCardToggle: (id: string) => void;
-  getFlightStatus: (flight: Flight) => boolean;
-}
-
-const FlightTabPanels = React.memo(function FlightTabPanels({
-  activeTab,
-  direction,
-  containerVariants,
-  cardVariants,
-  flights,
-  loading,
-  upcomingJourneys,
-  pastJourneys,
-  activeOpenCardId,
-  countryTheme,
-  handleDeleteTrip,
-  handleEditTrip,
-  handleCardToggle,
-  getFlightStatus,
-}: FlightTabPanelsProps) {
-  const isLightBg = isLightBackground(countryTheme.effectiveBg);
-  const subtleTextClass = isLightBg ? "text-neutral-600" : "text-white/40";
-  const softTextClass = isLightBg ? "text-neutral-700" : "text-white/60";
-  const iconMutedClass = isLightBg ? "text-neutral-500" : "text-white opacity-50";
-
-  return (
-    <AnimatePresence mode="wait" initial={false} custom={direction}>
-      {activeTab === "world" ? (
-        <motion.div
-          key="world"
-          layout
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-          exit="exit"
-          className="absolute inset-0 w-full h-full flex flex-col"
-        >
-          <WorldGlobe flights={flights} atmosphereColor={countryTheme.atmosphereColor} />
-        </motion.div>
-      ) : activeTab === "home" ? (
-        <motion.div
-          key="home"
-          layout
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-          exit="exit"
-          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[420px] px-4 pb-40 flex flex-col items-center gap-6"
-          style={{
-            maskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
-          }}
-        >
-          {loading ? (
-            <div className="flex flex-col gap-6 w-full items-center">
-              {[1, 2, 3].map((i) => (
-                <motion.div key={i} variants={cardVariants} className="w-full max-w-sm">
-                  <BoardingPassSkeleton />
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <>
-              {upcomingJourneys.map((journey, jIdx) => (
-                <div key={`upcoming-journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
-                  {journey.map((flight, fIdx) => {
-                    const nextFlight = journey[fIdx + 1];
-                    let isLayover = false;
-                    if (nextFlight) {
-                      const t1 = new Date(flight.departure_time).getTime();
-                      const t2 = new Date(nextFlight.departure_time).getTime();
-                      const firstFlight = t1 < t2 ? flight : nextFlight;
-                      const secondFlight = t1 < t2 ? nextFlight : flight;
-                      isLayover =
-                        (new Date(secondFlight.departure_time).getTime() -
-                          new Date(firstFlight.arrival_time).getTime()) /
-                          3600000 >
-                        12;
-                    }
-
-                    return (
-                      <React.Fragment key={flight.id}>
-                        <motion.div variants={cardVariants} layout className="w-full relative z-20">
-                          <DigitalBoardingPass
-                            flight={flight}
-                            onDelete={handleDeleteTrip}
-                            onEdit={handleEditTrip}
-                            isShifted={activeOpenCardId === flight.id}
-                            onToggleShift={() => handleCardToggle(flight.id)}
-                            isActive={getFlightStatus(flight)}
-                          />
-                        </motion.div>
-
-                        {fIdx < journey.length - 1 && (
-                          <motion.div
-                            variants={cardVariants}
-                            className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
-                          >
-                            <div className="w-6 h-6 rounded-full glass-dark flex items-center justify-center relative z-10 text-white">
-                              {isLayover ? (
-                                <Moon size={12} className="fill-white/20" />
-                              ) : (
-                                <Undo2 size={12} strokeWidth={3} />
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              ))}
-
-              {upcomingJourneys.length === 0 && (
-                <div className="mt-12 text-center">
-                  <p className={cn(subtleTextClass, "text-xs italic tracking-wide")}>
-                    Your upcoming flights will appear here
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </motion.div>
-      ) : (
-        <motion.div
-          key="history"
-          layout
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-          exit="exit"
-          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-24 px-4 pb-32 flex flex-col items-center gap-6"
-          style={{
-            maskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
-            WebkitMaskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
-          }}
-        >
-          {loading ? (
-            <div className="flex flex-col gap-6 w-full items-center">
-              {[1, 2, 3].map((i) => (
-                <motion.div key={i} variants={cardVariants} className="w-full max-w-sm">
-                  <BoardingPassSkeleton />
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <>
-              {pastJourneys.map((journey, jIdx) => (
-                <div key={`journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
-                  {journey.map((flight, fIdx) => {
-                    const nextFlight = journey[fIdx + 1];
-                    let isLayover = false;
-                    if (nextFlight) {
-                      const t1 = new Date(flight.departure_time).getTime();
-                      const t2 = new Date(nextFlight.departure_time).getTime();
-                      const firstFlight = t1 < t2 ? flight : nextFlight;
-                      const secondFlight = t1 < t2 ? nextFlight : flight;
-                      isLayover =
-                        (new Date(secondFlight.departure_time).getTime() -
-                          new Date(firstFlight.arrival_time).getTime()) /
-                          3600000 >
-                        12;
-                    }
-
-                    return (
-                      <React.Fragment key={flight.id}>
-                        <motion.div variants={cardVariants} layout className="w-full relative z-20">
-                          <DigitalBoardingPass
-                            flight={flight}
-                            onDelete={handleDeleteTrip}
-                            onEdit={handleEditTrip}
-                            isShifted={activeOpenCardId === flight.id}
-                            onToggleShift={() => handleCardToggle(flight.id)}
-                          />
-                        </motion.div>
-
-                        {fIdx < journey.length - 1 && (
-                          <motion.div
-                            variants={cardVariants}
-                            className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
-                          >
-                            <div className="w-6 h-6 rounded-full glass-dark flex items-center justify-center relative z-10 text-white">
-                              {isLayover ? (
-                                <Moon size={12} className="fill-white/20" />
-                              ) : (
-                                <Undo2 size={12} strokeWidth={3} />
-                              )}
-                            </div>
-                          </motion.div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
-                </div>
-              ))}
-
-              {pastJourneys.length === 0 && (
-                <div className="mt-20 flex flex-col items-center text-center">
-                  <div
-                    className={cn(
-                      "w-24 h-24 rounded-full border flex items-center justify-center mb-6",
-                      isLightBg ? "border-neutral-200 bg-white/80 shadow-sm" : "border-white/5 bg-white/5"
-                    )}
-                  >
-                    <History className={cn(iconMutedClass, "w-10 h-10")} />
-                  </div>
-                  <p className={cn(softTextClass, "text-sm font-medium tracking-wide")}>
-                    Your past journeys will appear here.
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-});
 
 
 export default function Home() {
@@ -394,11 +160,10 @@ export default function Home() {
 
   const currentLocation = getCurrentLocation();
   const currentLocationCode = currentPersona === "home" ? "YUL" : currentLocation.code;
-  const themeAirportCode = loading ? "YUL" : currentLocationCode;
-  const countryTheme = getCountryTheme(themeAirportCode);
-
+  const countryTheme = loading
+    ? getCountryTheme("YUL")
+    : getCountryTheme(currentLocationCode);
   const isLightBg = isLightBackground(countryTheme.effectiveBg);
-  const textTransitionStyle = { transition: `color ${THEME_TRANSITION_STYLE}` };
   const mutedTextClass = isLightBg ? "text-neutral-700" : "text-white/70";
   const subtleTextClass = isLightBg ? "text-neutral-600" : "text-white/40";
   const softTextClass = isLightBg ? "text-neutral-700" : "text-white/60";
@@ -576,11 +341,10 @@ export default function Home() {
   };
 
   // Sync background and theme-color with browser UI
-  useCountryThemeStyles();
+  useThemeColor(countryTheme.themeColor);
 
 
   return (
-    <PlaceTransitionProvider airportCode={themeAirportCode} persona={currentPersona}>
     <motion.main
       initial={{ opacity: 0 }}
       animate={{ opacity: isReady ? 1 : 0 }}
@@ -589,10 +353,9 @@ export default function Home() {
         "h-[100dvh] min-h-[100dvh] w-full font-sans selection:bg-emirates-red/30 relative overflow-hidden flex flex-col",
         isLightBg ? "text-neutral-900" : "text-white"
       )}
-      style={textTransitionStyle}
     >
       {/* Full Screen Background */}
-      <LiquidBackground />
+      <LiquidBackground theme={countryTheme} />
 
       {/* Top Navigation / Clocks - Only visible on Home/Settings */}
       <AnimatePresence>
@@ -610,6 +373,7 @@ export default function Home() {
                 faCode={currentLocation.code}
                 partnerCity="Montreal"
                 partnerCode="YUL"
+                persona={currentPersona}
                 onTogglePersona={() => setCurrentPersona(prev => prev === "home" ? "plane" : "home")}
                 isLoading={loading}
               />
@@ -660,22 +424,182 @@ export default function Home() {
       </AnimatePresence>
 
       <div className="flex-1 w-full max-w-full relative overflow-hidden">
-        <FlightTabPanels
-          activeTab={activeTab}
-          direction={direction}
-          containerVariants={containerVariants}
-          cardVariants={cardVariants}
-          flights={flights}
-          loading={loading}
-          upcomingJourneys={upcomingJourneys}
-          pastJourneys={pastJourneys}
-          activeOpenCardId={activeOpenCardId}
-          countryTheme={countryTheme}
-          handleDeleteTrip={handleDeleteTrip}
-          handleEditTrip={handleEditTrip}
-          handleCardToggle={handleCardToggle}
-          getFlightStatus={getFlightStatus}
-        />
+        <AnimatePresence mode="wait" initial={false} custom={direction}>
+          {activeTab === "world" ? (
+            <motion.div
+              key="world"
+              layout
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="absolute inset-0 w-full h-full flex flex-col"
+            >
+               {/* Globe will go here */}
+               <WorldGlobe flights={flights} atmosphereColor={countryTheme.atmosphereColor} />
+            </motion.div>
+          ) : activeTab === "home" ? (
+            <motion.div
+              key="home"
+              layout
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[420px] px-4 pb-40 flex flex-col items-center gap-6"
+              style={{
+                maskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
+              }}
+            >
+              {loading ? (
+                <div className="flex flex-col gap-6 w-full items-center">
+                  {[1, 2, 3].map((i) => (
+                    <motion.div key={i} variants={cardVariants} className="w-full max-w-sm">
+                      <BoardingPassSkeleton />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {upcomingJourneys
+                    .map((journey, jIdx) => (
+                      <div key={`upcoming-journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
+                        {journey.map((flight, fIdx) => {
+                          const nextFlight = journey[fIdx + 1];
+                          let isLayover = false;
+                          if (nextFlight) {
+                            const t1 = new Date(flight.departure_time).getTime();
+                            const t2 = new Date(nextFlight.departure_time).getTime();
+                            const firstFlight = t1 < t2 ? flight : nextFlight;
+                            const secondFlight = t1 < t2 ? nextFlight : flight;
+                            isLayover = (new Date(secondFlight.departure_time).getTime() - new Date(firstFlight.arrival_time).getTime()) / 3600000 > 12;
+                          }
+
+                          return (
+                            <React.Fragment key={flight.id}>
+                              <motion.div variants={cardVariants} layout className="w-full relative z-20">
+                                <DigitalBoardingPass
+                                  flight={flight}
+                                  onDelete={handleDeleteTrip}
+                                  onEdit={handleEditTrip}
+                                  isShifted={activeOpenCardId === flight.id}
+                                  onToggleShift={() => handleCardToggle(flight.id)}
+                                  isActive={getFlightStatus(flight)}
+                                />
+                              </motion.div>
+                              
+                              {fIdx < journey.length - 1 && (
+                                <motion.div 
+                                  variants={cardVariants}
+                                  className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
+                                >
+                                  <div className="w-6 h-6 rounded-full glass-dark flex items-center justify-center relative z-10 text-white">
+                                    {isLayover ? (
+                                      <Moon size={12} className="fill-white/20" />
+                                    ) : (
+                                      <Undo2 size={12} strokeWidth={3} />
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ))}
+
+                  {upcomingJourneys.length === 0 && (
+                    <div className="mt-12 text-center">
+                      <p className={cn(subtleTextClass, "text-xs italic tracking-wide")}>Your upcoming flights will appear here</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="history"
+              layout
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+              className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-24 px-4 pb-32 flex flex-col items-center gap-6"
+              style={{
+                maskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
+              }}
+            >
+              {loading ? (
+                <div className="flex flex-col gap-6 w-full items-center">
+                  {[1, 2, 3].map((i) => (
+                    <motion.div key={i} variants={cardVariants} className="w-full max-w-sm">
+                      <BoardingPassSkeleton />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {pastJourneys
+                    .map((journey, jIdx) => (
+                      <div key={`journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
+                        {journey.map((flight, fIdx) => {
+                          const nextFlight = journey[fIdx + 1];
+                          let isLayover = false;
+                          if (nextFlight) {
+                            const t1 = new Date(flight.departure_time).getTime();
+                            const t2 = new Date(nextFlight.departure_time).getTime();
+                            const firstFlight = t1 < t2 ? flight : nextFlight;
+                            const secondFlight = t1 < t2 ? nextFlight : flight;
+                            isLayover = (new Date(secondFlight.departure_time).getTime() - new Date(firstFlight.arrival_time).getTime()) / 3600000 > 12;
+                          }
+
+                          return (
+                            <React.Fragment key={flight.id}>
+                              <motion.div variants={cardVariants} layout className="w-full relative z-20">
+                                <DigitalBoardingPass
+                                  flight={flight}
+                                  onDelete={handleDeleteTrip} // Probably want to allow deleting history too?
+                                  onEdit={handleEditTrip}
+                                  isShifted={activeOpenCardId === flight.id}
+                                  onToggleShift={() => handleCardToggle(flight.id)}
+                                />
+                              </motion.div>
+                              
+                              {fIdx < journey.length - 1 && (
+                                <motion.div 
+                                  variants={cardVariants}
+                                  className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
+                                >
+                                  <div className="w-6 h-6 rounded-full glass-dark flex items-center justify-center relative z-10 text-white">
+                                    {isLayover ? (
+                                      <Moon size={12} className="fill-white/20" />
+                                    ) : (
+                                      <Undo2 size={12} strokeWidth={3} />
+                                    )}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    ))}
+
+                  {pastJourneys.length === 0 && (
+                    <div className="mt-20 flex flex-col items-center text-center">
+                      <div className={cn("w-24 h-24 rounded-full border flex items-center justify-center mb-6", isLightBg ? "border-neutral-200 bg-white/80 shadow-sm" : "border-white/5 bg-white/5")}>
+                        <History className={cn(iconMutedClass, "w-10 h-10")} />
+                      </div>
+                      <p className={cn(softTextClass, "text-sm font-medium tracking-wide")}>Your past journeys will appear here.</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Bottom Menu - Fixed */}
@@ -685,6 +609,7 @@ export default function Home() {
             activeTab={activeTab === "settings" ? "home" : activeTab}
             onTabChange={handleTabChange}
             onAddClick={() => setIsAddModalOpen(true)}
+            chromeColor={countryTheme.chromeColor}
           />
         </div>
       </div>
@@ -701,6 +626,5 @@ export default function Home() {
         flightToEdit={flights.find(f => f.id === editingFlightId) || null}
       />
     </motion.main>
-    </PlaceTransitionProvider>
   );
 }

@@ -1,20 +1,27 @@
 "use client";
 
 import React from "react";
-import { usePlaceTransition } from "@/components/PlaceTransitionProvider";
-import { hexToRgba } from "@/lib/colors";
 import { CountryTheme } from "@/types/countryTheme";
+import { hexToRgba } from "@/lib/colors";
 
-function BackgroundLayer({ theme }: { theme: CountryTheme }) {
+interface LiquidBackgroundProps {
+    theme: CountryTheme;
+}
+
+export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
     const [c0, c1, c2] = theme.washColors;
     const veil = theme.contentVeil;
+    const transition = "transition-all duration-[1000ms] ease-out";
 
     return (
-        <>
-            <div className="absolute inset-0" style={{ backgroundColor: theme.baseTint }} />
+        <div className="fixed inset-0 overflow-hidden pointer-events-none">
+            <div
+                className={`absolute inset-0 ${transition}`}
+                style={{ backgroundColor: theme.baseTint }}
+            />
 
             <div
-                className="absolute inset-0"
+                className={`absolute inset-0 ${transition}`}
                 style={{
                     backgroundImage: [
                         `radial-gradient(ellipse 90% 70% at 18% 22%, ${hexToRgba(c0, 0.55)} 0%, transparent 62%)`,
@@ -25,14 +32,14 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
             />
 
             <div
-                className="absolute inset-0"
+                className={`absolute inset-0 ${transition}`}
                 style={{
                     opacity: 0.55,
                     background: `linear-gradient(${theme.gradientAngle}deg, ${hexToRgba(c0, 0.35)} 0%, transparent 42%, ${hexToRgba(c1, 0.28)} 68%, transparent 100%)`,
                 }}
             />
             <div
-                className="absolute inset-0"
+                className={`absolute inset-0 ${transition}`}
                 style={{
                     opacity: 0.45,
                     background: `linear-gradient(${theme.secondaryAngle}deg, transparent 0%, ${hexToRgba(c2, 0.3)} 50%, transparent 100%)`,
@@ -42,7 +49,7 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
             {theme.blobConfigs.map((blob, index) => (
                 <div
                     key={`${theme.countryIso}-blob-${index}`}
-                    className="absolute rounded-full liquid-blob"
+                    className={`absolute rounded-full liquid-blob ${transition}`}
                     style={{
                         top: `${blob.top}%`,
                         left: `${blob.left}%`,
@@ -58,36 +65,13 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
             ))}
 
             <div
-                className="absolute inset-0 pointer-events-none"
+                className={`absolute inset-0 pointer-events-none ${transition}`}
                 style={{
                     background: `radial-gradient(ellipse 75% 58% at 50% 30%, rgba(255,255,255,${veil}) 0%, rgba(255,255,255,${veil * 0.35}) 45%, transparent 72%)`,
                 }}
             />
 
             <div className="absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-transparent opacity-40 pointer-events-none" />
-        </>
-    );
-}
-
-export default function LiquidBackground() {
-    const { fromTheme, toTheme, progress, isTransitioning } = usePlaceTransition();
-
-    const overlayOpacity = isTransitioning ? progress : 0;
-
-    return (
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute inset-0">
-                <BackgroundLayer theme={fromTheme} />
-            </div>
-
-            {isTransitioning && (
-                <div
-                    className="absolute inset-0"
-                    style={{ opacity: overlayOpacity }}
-                >
-                    <BackgroundLayer theme={toTheme} />
-                </div>
-            )}
         </div>
     );
 }
