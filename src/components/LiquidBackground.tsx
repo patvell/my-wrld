@@ -21,14 +21,14 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
             {/* Luminous base */}
             <div
                 className="absolute inset-0 transition-colors duration-[3000ms]"
-                style={{ backgroundColor: "#F8F6F3" }}
+                style={{ backgroundColor: "#FAFAF8" }}
             />
 
-            {/* Soft diagonal wash */}
+            {/* Soft diagonal wash — kept subtle so foreground text stays readable */}
             <div
-                className="absolute inset-0 opacity-45 transition-opacity duration-[3000ms]"
+                className="absolute inset-0 opacity-25 transition-opacity duration-[3000ms]"
                 style={{
-                    background: `linear-gradient(135deg, ${c0}88 0%, ${c1}66 45%, #F8F6F3 100%)`,
+                    background: `linear-gradient(135deg, ${c0}66 0%, ${c1}44 45%, #FAFAF8 100%)`,
                 }}
             />
 
@@ -45,19 +45,19 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
                             width: pos.size,
                             height: pos.size,
                             backgroundColor: color,
-                            opacity: 0.34,
-                            filter: "blur(90px)",
+                            opacity: 0.18,
+                            filter: "blur(100px)",
                             animationDelay: `${index * 4}s`,
                         }}
                     />
                 );
             })}
 
-            {/* Liquid sheen */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/45 via-transparent to-transparent opacity-70 pointer-events-none" />
+            {/* Center lift — keeps the main content zone closer to neutral white */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_35%,rgba(255,255,255,0.85)_0%,transparent_70%)] pointer-events-none" />
 
-            {/* Gentle depth */}
-            <div className="absolute inset-0 bg-gradient-to-tl from-black/[0.03] via-transparent to-transparent pointer-events-none" />
+            {/* Liquid sheen */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-transparent to-transparent opacity-60 pointer-events-none" />
         </div>
     );
 }

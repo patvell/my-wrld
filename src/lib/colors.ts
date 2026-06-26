@@ -42,6 +42,21 @@ export function getContrastHex(bgHex: string): string {
     return getContrastColor(bgHex) === "black" ? "#1a1a1a" : "#FFFFFF";
 }
 
+export function isLightBackground(bgHex: string): boolean {
+    return getContrastColor(bgHex) === "black";
+}
+
+/** Consistent readable text tones for UI over country gradient backgrounds. */
+export function getReadableTextColors(effectiveBg: string) {
+    const light = isLightBackground(effectiveBg);
+    return {
+        primary: light ? "#171717" : "#FFFFFF",
+        secondary: light ? "rgba(23, 23, 23, 0.62)" : "rgba(255, 255, 255, 0.72)",
+        muted: light ? "rgba(23, 23, 23, 0.45)" : "rgba(255, 255, 255, 0.5)",
+        onFrosted: "#FFFFFF",
+    };
+}
+
 export function mixWithWhite(hex: string, amount: number): string {
     const rgb = hexToRgb(hex);
     if (!rgb) return "#F8F6F3";

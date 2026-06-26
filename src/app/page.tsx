@@ -12,7 +12,7 @@ import { Flight, PersonaMode } from "@/types";
 import { getAirportTimezone } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCountryTheme } from "@/lib/countryTheme";
-import { getContrastHex } from "@/lib/colors";
+import { isLightBackground } from "@/lib/colors";
 import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -163,12 +163,11 @@ export default function Home() {
   const countryTheme = loading
     ? getCountryTheme("YUL")
     : getCountryTheme(currentLocationCode);
-  const textColor = getContrastHex(countryTheme.effectiveBg);
-  const isLightText = textColor === "#FFFFFF";
-  const mutedTextClass = isLightText ? "text-white/50" : "text-neutral-500";
-  const subtleTextClass = isLightText ? "text-white/20" : "text-neutral-400";
-  const softTextClass = isLightText ? "text-white/60" : "text-neutral-600";
-  const iconMutedClass = isLightText ? "text-white opacity-50" : "text-neutral-400";
+  const isLightBg = isLightBackground(countryTheme.effectiveBg);
+  const mutedTextClass = isLightBg ? "text-neutral-700" : "text-white/70";
+  const subtleTextClass = isLightBg ? "text-neutral-600" : "text-white/40";
+  const softTextClass = isLightBg ? "text-neutral-700" : "text-white/60";
+  const iconMutedClass = isLightBg ? "text-neutral-500" : "text-white opacity-50";
 
   const upcomingFlights = flights.filter(f => !hasFlightArrived(f));
   const upcomingJourneys = groupFlightsIntoJourneys(upcomingFlights, true);
@@ -352,7 +351,7 @@ export default function Home() {
       transition={{ duration: 1.5, ease: "easeInOut" }}
       className={cn(
         "h-[100dvh] min-h-[100dvh] w-full font-sans selection:bg-emirates-red/30 relative overflow-hidden flex flex-col",
-        isLightText ? "text-white" : "text-neutral-900"
+        isLightBg ? "text-neutral-900" : "text-white"
       )}
     >
       {/* Full Screen Background */}
@@ -392,9 +391,9 @@ export default function Home() {
             exit={{ opacity: 0, y: -10 }}
             className="absolute top-[340px] left-0 right-0 z-40 flex justify-center pointer-events-none"
           >
-            <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent mix-blend-plus-lighter backdrop-blur-sm">
-              <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase drop-shadow-md", mutedTextClass)}>Upcoming Trips ({upcomingFlights.length})</h3>
-              <div className="h-[1px] flex-1 bg-white/10 ml-6" />
+            <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 pointer-events-auto">
+              <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase", mutedTextClass)}>Upcoming Trips ({upcomingFlights.length})</h3>
+              <div className={cn("h-[1px] flex-1 ml-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
             </div>
           </motion.div>
         )}
@@ -410,11 +409,11 @@ export default function Home() {
             className="absolute top-8 left-0 right-0 z-40 flex justify-center pointer-events-none"
           >
             <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent pointer-events-auto">
-              <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase drop-shadow-md", mutedTextClass)}>Past Trips ({pastFlights.length})</h3>
-              <div className="h-[1px] flex-1 bg-white/10 mx-6" />
+              <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase", mutedTextClass)}>Past Trips ({pastFlights.length})</h3>
+              <div className={cn("h-[1px] flex-1 mx-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
               <button
                 onClick={() => setHistorySortAsc(!historySortAsc)}
-                className={cn(mutedTextClass, isLightText ? "hover:text-white" : "hover:text-neutral-800", "transition-colors")}
+                className={cn(mutedTextClass, isLightBg ? "hover:text-neutral-900" : "hover:text-white", "transition-colors")}
                 title={historySortAsc ? "Sort Oldest to Newest" : "Sort Newest to Oldest"}
               >
                 <ArrowUpDown size={14} strokeWidth={3} />
@@ -495,7 +494,7 @@ export default function Home() {
                                   variants={cardVariants}
                                   className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
                                 >
-                                  <div className={cn("w-6 h-6 rounded-full flex items-center justify-center relative z-10", isLightText ? "glass text-white" : "glass-dark text-white")}>
+                                  <div className="w-6 h-6 rounded-full glass-dark flex items-center justify-center relative z-10 text-white">
                                     {isLayover ? (
                                       <Moon size={12} className="fill-white/20" />
                                     ) : (
@@ -573,7 +572,7 @@ export default function Home() {
                                   variants={cardVariants}
                                   className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
                                 >
-                                  <div className={cn("w-6 h-6 rounded-full flex items-center justify-center relative z-10", isLightText ? "glass text-white" : "glass-dark text-white")}>
+                                  <div className="w-6 h-6 rounded-full glass-dark flex items-center justify-center relative z-10 text-white">
                                     {isLayover ? (
                                       <Moon size={12} className="fill-white/20" />
                                     ) : (
@@ -590,7 +589,7 @@ export default function Home() {
 
                   {pastJourneys.length === 0 && (
                     <div className="mt-20 flex flex-col items-center text-center">
-                      <div className={cn("w-24 h-24 rounded-full border flex items-center justify-center mb-6", isLightText ? "border-white/5 bg-white/5" : "border-neutral-200 bg-white/60")}>
+                      <div className={cn("w-24 h-24 rounded-full border flex items-center justify-center mb-6", isLightBg ? "border-neutral-200 bg-white/80 shadow-sm" : "border-white/5 bg-white/5")}>
                         <History className={cn(iconMutedClass, "w-10 h-10")} />
                       </div>
                       <p className={cn(softTextClass, "text-sm font-medium tracking-wide")}>Your past journeys will appear here.</p>
