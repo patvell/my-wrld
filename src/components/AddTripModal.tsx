@@ -74,13 +74,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             toast.error("Enter a flight number first");
             return;
         }
-        if (!originDate) {
-            toast.error("Pick a departure date first");
-            return;
-        }
+        // Flexible entry order: a date isn't required to look up. Use the chosen
+        // departure date if present, otherwise today, to pick the schedule.
+        const lookupDate = originDate || new Date().toISOString().slice(0, 10);
         setLookingUp(true);
         try {
-            const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: originDate });
+            const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: lookupDate });
             const res = await fetch(`/api/aeroapi/lookup?${params.toString()}`);
             if (!res.ok) throw new Error("Lookup failed");
             const data = await res.json();
@@ -101,7 +100,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             // Keep the user's chosen departure date (they often book a month out,
             // beyond AeroAPI's horizon). Fill route + times from the schedule and
             // derive the arrival date from the overnight day-span.
-            const baseDate = originDate || dep.slice(0, 10);
+            const baseDate = lookupDate;
             setOrigin(f.origin_code);
             setOriginDate(baseDate);
             setOriginTime(dep.slice(11, 16));
@@ -199,12 +198,21 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         }
     }, [isOpen, flightToEdit]);
 
-    // Moving the departure date keeps the arrival date the same number of days
-    // ahead (so overnight flights stay correct) once a span is known.
+    // Moving the departure date carries the arrival date with it, keeping the
+    // same day-span (so overnight flights stay correct) and the arrival time.
+    // Works after a lookup (span known) and for manual entry (derive span from
+    // the currently entered dates).
     const handleOriginDateChange = (value: string) => {
+        const span =
+            arrivalDayOffset != null
+                ? arrivalDayOffset
+                : originDate && destDate
+                  ? daySpan(originDate, destDate)
+                  : null;
         setOriginDate(value);
-        if (arrivalDayOffset != null && value) {
-            setDestDate(addDays(value, arrivalDayOffset));
+        if (span != null && value) {
+            setDestDate(addDays(value, span));
+            setArrivalDayOffset(span);
         }
     };
 
