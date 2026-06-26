@@ -1,30 +1,32 @@
-import { createClient } from '@libsql/client';
+import { createClient, type Client } from '@libsql/client';
+import path from 'path';
 
-let client: ReturnType<typeof createClient> | null = null;
+let client: Client | null = null;
 let initialized = false;
+
+function createDbClient(): Client {
+  const url = process.env.TURSO_DATABASE_URL;
+  const authToken = process.env.TURSO_AUTH_TOKEN;
+
+  if (url && authToken) {
+    return createClient({ url, authToken });
+  }
+
+  const localDbPath = path.join(process.cwd(), 'my-wrld.db');
+  console.warn(
+    `Turso environment variables not found. Using local SQLite database at ${localDbPath}`
+  );
+  return createClient({ url: `file:${localDbPath}` });
+}
 
 export async function getDb() {
   if (!client) {
-    const url = process.env.TURSO_DATABASE_URL;
-    const authToken = process.env.TURSO_AUTH_TOKEN;
-
-    if (!url || !authToken) {
-      // If we're building, we might not have these yet. 
-      // Return a dummy or throw a more helpful error if called at runtime.
-      if (process.env.NODE_ENV === 'production' && !process.env.VERCEL) {
-         throw new Error("Missing Turso environment variables.");
-      }
-      // Return a proxy or just fail gracefully if this is just a build-time import
-      console.warn("Turso environment variables not found. Database will be unavailable.");
-      return null as any; 
-    }
-
-    client = createClient({ url, authToken });
+    client = createDbClient();
   }
 
   const db = client;
 
-  if (!initialized && db) {
+  if (!initialized) {
     await db.execute(`
       CREATE TABLE IF NOT EXISTS flights (
         id TEXT PRIMARY KEY,
