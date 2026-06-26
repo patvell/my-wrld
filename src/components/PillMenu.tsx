@@ -2,9 +2,13 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Map, History, Plus, Compass, Globe } from "lucide-react";
+import { History, Plus, Compass, Globe } from "lucide-react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import {
+    THEME_TRANSITION_MS,
+    THEME_TRANSITION_MOTION_EASE,
+} from "@/lib/themeTransition";
 
 function cn(...inputs: ClassValue[]) {
     return twMerge(clsx(inputs));
@@ -53,8 +57,14 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                 <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={onAddClick}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110 transition-colors duration-[3000ms]"
-                    style={{ backgroundColor: chromeColor }}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110"
+                    animate={{ backgroundColor: chromeColor }}
+                    transition={{
+                        backgroundColor: {
+                            duration: THEME_TRANSITION_MS / 1000,
+                            ease: THEME_TRANSITION_MOTION_EASE,
+                        },
+                    }}
                 >
                     <Plus size={20} />
                 </motion.button>

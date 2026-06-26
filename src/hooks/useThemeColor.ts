@@ -1,16 +1,45 @@
 "use client";
 
 import { useEffect } from "react";
+import { CountryTheme } from "@/types/countryTheme";
+import { THEME_TRANSITION_STYLE } from "@/lib/themeTransition";
 
 /**
- * Hook to sync a color with the browser's theme-color meta tag
- * and a CSS variable for global background styling.
+ * Syncs country theme colors to CSS variables and browser chrome,
+ * using the same transition timing as the background crossfade.
  */
+export function useCountryThemeStyles(theme: CountryTheme) {
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+
+        const root = document.documentElement;
+        root.style.setProperty("--country-chrome", theme.chromeColor);
+        root.style.setProperty("--dynamic-background", theme.themeColor);
+        root.style.setProperty("--theme-transition", THEME_TRANSITION_STYLE);
+
+        document.body.style.transition = `background-color ${THEME_TRANSITION_STYLE}`;
+
+        let metaThemeColor = document.querySelector(
+            'meta[name="theme-color"]'
+        ) as HTMLMetaElement | null;
+
+        if (!metaThemeColor) {
+            metaThemeColor = document.createElement("meta");
+            metaThemeColor.name = "theme-color";
+            document.head.appendChild(metaThemeColor);
+        }
+        metaThemeColor.content = theme.themeColor;
+
+        document.body.style.backgroundColor = theme.themeColor;
+        root.style.backgroundColor = theme.themeColor;
+    }, [theme.countryIso, theme.chromeColor, theme.themeColor]);
+}
+
+/** @deprecated Use useCountryThemeStyles */
 export function useThemeColor(color: string) {
     useEffect(() => {
         if (typeof document === "undefined") return;
 
-        // 1. Update/Create the <meta name="theme-color"> tag
         let metaThemeColor = document.querySelector(
             'meta[name="theme-color"]'
         ) as HTMLMetaElement | null;
@@ -22,13 +51,8 @@ export function useThemeColor(color: string) {
         }
         metaThemeColor.content = color;
 
-        // 2. Set dynamic background CSS variable on documentElement
-        // This allows CSS to react to the color change
         document.documentElement.style.setProperty("--dynamic-background", color);
-
-        // 3. Redundantly set body background color for immediate effect/fallbacks
         document.body.style.backgroundColor = color;
         document.documentElement.style.backgroundColor = color;
-
     }, [color]);
 }

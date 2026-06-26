@@ -17,7 +17,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { History, ArrowUpDown, Undo2, Moon } from "lucide-react";
-import { useThemeColor } from "@/hooks/useThemeColor";
+import { useCountryThemeStyles } from "@/hooks/useThemeColor";
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -341,7 +341,7 @@ export default function Home() {
   };
 
   // Sync background and theme-color with browser UI
-  useThemeColor(countryTheme.themeColor);
+  useCountryThemeStyles(countryTheme);
 
 
   return (
