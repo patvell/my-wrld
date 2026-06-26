@@ -7,7 +7,15 @@ import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
 import { Flight, FlightInput } from "@/types";
 import { normalizeWallClock } from "@/lib/time";
+import { daySpan } from "@/lib/aeroMapper";
 import { AIRLINE_CODE } from "@/lib/config";
+
+/** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
+function addDays(date: string, n: number): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+}
 
 interface AddTripModalProps {
     isOpen: boolean;
@@ -37,6 +45,8 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     // AeroAPI lookup (autofill)
     const [aeroConfigured, setAeroConfigured] = useState(false);
     const [lookingUp, setLookingUp] = useState(false);
+    // Days the arrival falls after departure (preserved when the date is moved).
+    const [arrivalDayOffset, setArrivalDayOffset] = useState<number | null>(null);
 
     const dialogRef = useRef<HTMLDivElement>(null);
     const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -86,15 +96,26 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             const f = data.flight as FlightInput;
             const dep = normalizeWallClock(f.departure_time);
             const arr = normalizeWallClock(f.arrival_time);
+            const span = typeof data.day_span === "number" ? data.day_span : daySpan(dep, arr);
+
+            // Keep the user's chosen departure date (they often book a month out,
+            // beyond AeroAPI's horizon). Fill route + times from the schedule and
+            // derive the arrival date from the overnight day-span.
+            const baseDate = originDate || dep.slice(0, 10);
             setOrigin(f.origin_code);
-            setOriginDate(dep.slice(0, 10));
+            setOriginDate(baseDate);
             setOriginTime(dep.slice(11, 16));
             setDestination(f.destination_code);
-            setDestDate(arr.slice(0, 10));
+            setDestDate(addDays(baseDate, span));
             setDestTime(arr.slice(11, 16));
+            setArrivalDayOffset(span);
             if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
             setErrors({});
-            toast.success(`Found ${f.origin_code} -> ${f.destination_code}`);
+            toast.success(
+                data.exact
+                    ? `Found ${f.origin_code} -> ${f.destination_code}`
+                    : `Loaded ${f.origin_code} -> ${f.destination_code} schedule - set your travel date`,
+            );
         } catch {
             toast.error("Could not look up flight");
         } finally {
@@ -159,6 +180,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestination(flightToEdit.destination_code);
                 setDestDate(arr.slice(0, 10));
                 setDestTime(arr.slice(11, 16));
+                setArrivalDayOffset(daySpan(dep, arr));
 
                 setErrors({});
             } else {
@@ -171,10 +193,20 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestDate(today);
                 setOriginTime("");
                 setDestTime("");
+                setArrivalDayOffset(null);
                 setErrors({});
             }
         }
     }, [isOpen, flightToEdit]);
+
+    // Moving the departure date keeps the arrival date the same number of days
+    // ahead (so overnight flights stay correct) once a span is known.
+    const handleOriginDateChange = (value: string) => {
+        setOriginDate(value);
+        if (arrivalDayOffset != null && value) {
+            setDestDate(addDays(value, arrivalDayOffset));
+        }
+    };
 
     const handleTimeChange = (val: string, setter: (v: string) => void) => {
         const digits = val.replace(/\D/g, '').slice(0, 4);
@@ -363,7 +395,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={originDate}
                                                     min={!isHistoryMode ? today : undefined}
                                                     max={isHistoryMode ? today : undefined}
-                                                    onChange={(e) => setOriginDate(e.target.value)}
+                                                    onChange={(e) => handleOriginDateChange(e.target.value)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
                                                     required
                                                 />

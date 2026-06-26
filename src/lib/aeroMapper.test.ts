@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { AeroFlight } from "@/lib/aeroapi";
-import { mapAeroFlightToInput, pickFlightForDate, mapAeroFlightToStatus } from "@/lib/aeroMapper";
+import { mapAeroFlightToInput, pickFlightForDate, mapAeroFlightToStatus, daySpan } from "@/lib/aeroMapper";
 
 function aeroFlight(overrides: Partial<AeroFlight> = {}): AeroFlight {
   return {
@@ -56,6 +56,18 @@ describe("pickFlightForDate", () => {
 
   it("returns null for an empty list", () => {
     expect(pickFlightForDate([], "2026-04-20")).toBeNull();
+  });
+});
+
+describe("daySpan", () => {
+  it("is 0 for a same-day flight", () => {
+    expect(daySpan("2026-06-26T15:25", "2026-06-26T20:15")).toBe(0);
+  });
+  it("is 1 for an overnight flight", () => {
+    expect(daySpan("2026-06-26T22:15", "2026-06-27T06:25")).toBe(1);
+  });
+  it("ignores time/offset suffixes", () => {
+    expect(daySpan("2026-06-26T22:15:00+00:00", "2026-06-28T06:25:00Z")).toBe(2);
   });
 });
 

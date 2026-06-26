@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getFlightsByIdent, isAeroApiConfigured, AeroApiError } from "@/lib/aeroapi";
-import { mapAeroFlightToInput, pickFlightForDate } from "@/lib/aeroMapper";
+import { mapAeroFlightToInput, pickFlightForDate, daySpan } from "@/lib/aeroMapper";
 import { getCached, setCached, LOOKUP_TTL_MS } from "@/lib/aeroCache";
 import { toAeroIdent } from "@/lib/config";
 import { FlightInput } from "@/types";
@@ -14,6 +14,15 @@ const querySchema = z.object({
 interface LookupResult {
   configured: boolean;
   found: boolean;
+  /** Whether the matched instance is actually on the requested date. */
+  exact?: boolean;
+  /** Calendar days arrival falls after departure (0 same day, 1 overnight). */
+  day_span?: number;
+  /**
+   * The flight schedule (route + times). Its dates reflect the matched AeroAPI
+   * instance, which may differ from the requested date; the client applies the
+   * user's chosen departure date and derives the arrival date from `day_span`.
+   */
   flight?: FlightInput;
 }
 
@@ -45,11 +54,18 @@ export async function GET(request: Request) {
     const flights = await getFlightsByIdent(aeroIdent);
     const match = pickFlightForDate(flights, date);
     const mapped = match ? mapAeroFlightToInput(match) : null;
-    // Only treat as found when the schedule actually lands on the requested date.
-    const found = Boolean(mapped && mapped.departure_time.slice(0, 10) === date);
 
-    const result: LookupResult = found
-      ? { configured: true, found: true, flight: mapped! }
+    // Return any usable schedule (route + times), even if the matched instance
+    // isn't on the requested date. This lets users look up flights booked far in
+    // advance (beyond AeroAPI's ~2-week horizon) and apply their own date.
+    const result: LookupResult = mapped
+      ? {
+          configured: true,
+          found: true,
+          exact: mapped.departure_time.slice(0, 10) === date,
+          day_span: daySpan(mapped.departure_time, mapped.arrival_time),
+          flight: mapped,
+        }
       : { configured: true, found: false };
 
     await setCached(cacheKey, result);

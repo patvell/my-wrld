@@ -24,6 +24,18 @@ function flightNumberFrom(f: AeroFlight): string {
 }
 
 /**
+ * Number of calendar days the arrival wall-clock falls after the departure
+ * wall-clock (0 = same day, 1 = lands the next day, etc). Used to preserve an
+ * overnight span when the user moves the trip to a different departure date.
+ */
+export function daySpan(departureWallClock: string, arrivalWallClock: string): number {
+  const dep = Date.parse(`${departureWallClock.slice(0, 10)}T00:00:00Z`);
+  const arr = Date.parse(`${arrivalWallClock.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(dep) || Number.isNaN(arr)) return 0;
+  return Math.round((arr - dep) / 86_400_000);
+}
+
+/**
  * Choose the AeroAPI flight whose scheduled departure (local date) matches the
  * requested date (YYYY-MM-DD). Falls back to the closest by departure instant.
  */
