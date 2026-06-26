@@ -2,10 +2,15 @@
 
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
+import type { MeshStandardMaterial } from "three";
 import { Flight } from "@/types";
 import { AIRPORTS } from "@/data/airports";
+import { applyTextureAnisotropy, loadGlobeTexture } from "@/lib/createGlobeTexture";
 
 const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
+
+const TILT_LIMIT = (55 * Math.PI) / 180;
+const AUTO_ROTATE_RESUME_MS = 3000;
 
 interface WorldGlobeProps {
   flights: Flight[];
@@ -38,8 +43,11 @@ function isFlightPast(flight: Flight): boolean {
 
 export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   const globeRef = useRef<any>(null);
+  const textureRef = useRef<any>(null);
+  const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dimensions, setDimensions] = useState({ width: 390, height: 844 });
-  const [customMaterial, setCustomMaterial] = useState<any>(null);
+  const [customMaterial, setCustomMaterial] = useState<MeshStandardMaterial | null>(null);
+  const [isGlobeReady, setIsGlobeReady] = useState(false);
   const [selectedPoint, setSelectedPoint] = useState<any>(null);
 
   useEffect(() => {
@@ -50,59 +58,46 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   }, []);
 
   useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i+1], b = data[i+2];
-        const brightness = (r + g + b) / 3;
-        const isWater = b > r && b > g && brightness < 60;
-        if (isWater) {
-          data[i+3] = 40;
-        } else {
-          data[i] = 230; data[i+1] = 230; data[i+2] = 230;
-          data[i+3] = 240; 
+    let cancelled = false;
+
+    loadGlobeTexture()
+      .then(({ material, texture }) => {
+        if (cancelled) return;
+        textureRef.current = texture;
+        setCustomMaterial(material);
+
+        if (globeRef.current) {
+          const renderer = globeRef.current.renderer();
+          const maxAniso = renderer.capabilities.getMaxAnisotropy();
+          applyTextureAnisotropy(texture, maxAniso);
         }
-      }
-      ctx.putImageData(imageData, 0, 0);
-      import("three").then((THREE) => {
-        const tex = new THREE.CanvasTexture(canvas);
-        const mat = new THREE.MeshPhongMaterial({
-          map: tex, transparent: true, opacity: 0.85,
-          specular: new THREE.Color(0xffffff), shininess: 100, side: THREE.DoubleSide
-        });
-        setCustomMaterial(mat);
+      })
+      .catch((error) => {
+        console.error("Failed to load globe texture:", error);
       });
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
-  // Helper: Haversine distance in km
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371; // Earth's radius
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
 
   const points = useMemo(() => {
     const seen = new Set<string>();
     const pts: PointDatum[] = [];
-    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-    
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
     flights.forEach((f) => {
       const past = isFlightPast(f);
       [f.origin_code, f.destination_code].forEach((code) => {
@@ -114,10 +109,10 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
             if (isMobile) size *= 2.5;
             else size *= 1.5;
 
-            pts.push({ 
-              lat: ap.lat, lng: ap.lng, code, 
-              color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.6)", 
-              size 
+            pts.push({
+              lat: ap.lat, lng: ap.lng, code,
+              color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.6)",
+              size,
             });
           }
         }
@@ -126,12 +121,12 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     return pts;
   }, [flights]);
 
-  const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }, event: MouseEvent) => {
+  const handleGlobeClick = useCallback(({ lat, lng }: { lat: number; lng: number }) => {
     const THRESHOLD = 500;
     let closestPoint = null;
     let minDistance = Infinity;
 
-    points.forEach(p => {
+    points.forEach((p) => {
       const dist = getDistance(lat, lng, p.lat, p.lng);
       if (dist < minDistance && dist < THRESHOLD) {
         minDistance = dist;
@@ -140,31 +135,62 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     });
 
     if (closestPoint) {
-      setSelectedPoint(selectedPoint?.code === (closestPoint as any).code ? null : closestPoint);
+      setSelectedPoint(selectedPoint?.code === (closestPoint as PointDatum).code ? null : closestPoint);
     } else {
       setSelectedPoint(null);
     }
   }, [points, selectedPoint]);
 
-  const handleInteraction = useCallback(() => {
+  const resumeAutoRotate = useCallback(() => {
+    if (!globeRef.current) return;
+    const controls = globeRef.current.controls();
+    if (controls) controls.autoRotate = true;
   }, []);
+
+  const scheduleAutoRotateResume = useCallback(() => {
+    if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+    autoRotateTimerRef.current = setTimeout(resumeAutoRotate, AUTO_ROTATE_RESUME_MS);
+  }, [resumeAutoRotate]);
 
   const handleGlobeReady = useCallback(() => {
     if (!globeRef.current) return;
+
     const controls = globeRef.current.controls();
     if (controls) {
       controls.autoRotate = true;
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
       controls.enablePan = false;
+      controls.minPolarAngle = Math.PI / 2 - TILT_LIMIT;
+      controls.maxPolarAngle = Math.PI / 2 + TILT_LIMIT;
+
+      controls.addEventListener("start", () => {
+        controls.autoRotate = false;
+        if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+      });
+      controls.addEventListener("end", scheduleAutoRotateResume);
     }
+
+    if (textureRef.current) {
+      const renderer = globeRef.current.renderer();
+      const maxAniso = renderer.capabilities.getMaxAnisotropy();
+      applyTextureAnisotropy(textureRef.current, maxAniso);
+    }
+
     const isMobile = window.innerWidth < 768;
     globeRef.current.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
+    setIsGlobeReady(true);
+  }, [scheduleAutoRotateResume]);
+
+  useEffect(() => {
+    return () => {
+      if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+    };
   }, []);
 
   const visitCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    flights.forEach(f => {
+    flights.forEach((f) => {
       if (isFlightPast(f)) {
         counts[f.destination_code] = (counts[f.destination_code] || 0) + 1;
       }
@@ -180,7 +206,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
       return {
         startLat: origin.lat, startLng: origin.lng, endLat: dest.lat, endLng: dest.lng,
         color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.5)",
-        isPast: past
+        isPast: past,
       };
     }).filter(Boolean) as ArcDatum[];
   }, [flights]);
@@ -192,6 +218,8 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   }, [flights]);
   const pastCount = useMemo(() => flights.filter(isFlightPast).length, [flights]);
   const upcomingCount = flights.length - pastCount;
+
+  const showGlobe = customMaterial && isGlobeReady;
 
   return (
     <div className="relative w-full h-full">
@@ -213,68 +241,71 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
         </div>
       </div>
 
-      <div className="absolute inset-0 flex items-center justify-center">
-        <Globe
-          ref={globeRef}
-          width={dimensions.width}
-          height={dimensions.height}
-          backgroundColor="rgba(0,0,0,0)"
-          globeImageUrl={customMaterial ? undefined : "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"}
-          globeMaterial={customMaterial}
-          showGraticules={true}
-          showAtmosphere={true}
-          atmosphereColor={primaryColor}
-          atmosphereAltitude={0.25}
-          onGlobeReady={handleGlobeReady}
-          onGlobeClick={handleGlobeClick}
-          onZoom={handleInteraction}
-          arcsData={arcs}
-          arcStartLat={(d: any) => d.startLat}
-          arcStartLng={(d: any) => d.startLng}
-          arcEndLat={(d: any) => d.endLat}
-          arcEndLng={(d: any) => d.endLng}
-          arcColor={(d: any) => d.color}
-          arcStroke={(d: any) => d.isPast ? 1.4 : 0.8}
-          arcDashLength={0}
-          arcDashGap={0}
-          arcDashAnimateTime={0}
-          pointsData={points}
-          pointColor={(d: any) => d.color}
-          pointRadius={(d: any) => d.size}
-          pointAltitude={0.01}
-          htmlElementsData={selectedPoint ? [selectedPoint] : []}
-          htmlElement={(d: any) => {
-            const info = AIRPORTS[d.code];
-            const visits = visitCounts[d.code] || 0;
-            const el = document.createElement('div');
-            el.innerHTML = `
-              <div class="flex flex-col items-center" style="transform: translate(-50%, -100%); margin-top: -10px; pointer-events: none;">
-                <div style="background: rgba(10,10,10,0.95); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(20px); padding: 12px 16px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); min-width: 140px;">
-                  <div style="display: flex; flex-direction: column; gap: 2px;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
-                      <span style="font-size: 24px; font-weight: 900; letter-spacing: -0.05em; color: white; line-height: 1;">${d.code}</span>
-                      <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.2em; color: rgba(255,255,255,0.4); text-transform: uppercase;">${info?.countryIso || ''}</span>
-                    </div>
-                    <div style="font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9); text-transform: uppercase; margin-top: 4px;">${info?.city || ''}</div>
-                    <div style="width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 6px 0;"></div>
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
-                      <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.2em; color: rgba(255,255,255,0.4); text-transform: uppercase;">Visits</span>
-                      <span style="font-size: 14px; font-weight: 900; color: white;">${visits}</span>
+      <div
+        className="absolute inset-0 flex items-center justify-center transition-opacity duration-[400ms]"
+        style={{ opacity: showGlobe ? 1 : 0 }}
+      >
+        {customMaterial && (
+          <Globe
+            ref={globeRef}
+            width={dimensions.width}
+            height={dimensions.height}
+            backgroundColor="rgba(0,0,0,0)"
+            globeMaterial={customMaterial}
+            showGraticules={false}
+            showAtmosphere={true}
+            atmosphereColor={primaryColor}
+            atmosphereAltitude={0.18}
+            onGlobeReady={handleGlobeReady}
+            onGlobeClick={handleGlobeClick}
+            arcsData={arcs}
+            arcStartLat={(d: any) => d.startLat}
+            arcStartLng={(d: any) => d.startLng}
+            arcEndLat={(d: any) => d.endLat}
+            arcEndLng={(d: any) => d.endLng}
+            arcColor={(d: any) => d.color}
+            arcStroke={(d: any) => d.isPast ? 1.4 : 0.8}
+            arcDashLength={0}
+            arcDashGap={0}
+            arcDashAnimateTime={0}
+            pointsData={points}
+            pointColor={(d: any) => d.color}
+            pointRadius={(d: any) => d.size}
+            pointAltitude={0.01}
+            htmlElementsData={selectedPoint ? [selectedPoint] : []}
+            htmlElement={(d: any) => {
+              const info = AIRPORTS[d.code];
+              const visits = visitCounts[d.code] || 0;
+              const el = document.createElement("div");
+              el.innerHTML = `
+                <div class="flex flex-col items-center" style="transform: translate(-50%, -100%); margin-top: -10px; pointer-events: none;">
+                  <div style="background: rgba(10,10,10,0.95); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(20px); padding: 12px 16px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); min-width: 140px;">
+                    <div style="display: flex; flex-direction: column; gap: 2px;">
+                      <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+                        <span style="font-size: 24px; font-weight: 900; letter-spacing: -0.05em; color: white; line-height: 1;">${d.code}</span>
+                        <span style="font-size: 10px; font-weight: 700; letter-spacing: 0.2em; color: rgba(255,255,255,0.4); text-transform: uppercase;">${info?.countryIso || ""}</span>
+                      </div>
+                      <div style="font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.9); text-transform: uppercase; margin-top: 4px;">${info?.city || ""}</div>
+                      <div style="width: 100%; height: 1px; background: rgba(255,255,255,0.1); margin: 6px 0;"></div>
+                      <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 8px; font-weight: 700; letter-spacing: 0.2em; color: rgba(255,255,255,0.4); text-transform: uppercase;">Visits</span>
+                        <span style="font-size: 14px; font-weight: 900; color: white;">${visits}</span>
+                      </div>
                     </div>
                   </div>
+                  <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid rgba(255,255,255,0.2); margin-top: -1px;"></div>
                 </div>
-                <div style="width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 6px solid rgba(255,255,255,0.2); margin-top: -1px;"></div>
-              </div>
-            `;
-            return el;
-          }}
-        />
+              `;
+              return el;
+            }}
+          />
+        )}
       </div>
     </div>
   );
 }
 
-function StatPill({ value, label, dim = false }: any) {
+function StatPill({ value, label, dim = false }: { value: number; label: string; dim?: boolean }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className={`text-xs font-bold ${dim ? "text-white/60" : "text-white"}`}>{value}</span>
@@ -283,11 +314,11 @@ function StatPill({ value, label, dim = false }: any) {
   );
 }
 
-function LegendItem({ label, color }: any) {
+function LegendItem({ label, color }: { label: string; color: string }) {
   return (
     <div className="flex items-center gap-2">
       <div style={{ height: 2, width: 20, background: color, borderRadius: 10 }} />
-      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: color }}>{label}</span>
+      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color }}>{label}</span>
     </div>
   );
 }
