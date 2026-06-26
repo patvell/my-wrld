@@ -7,57 +7,57 @@ interface LiquidBackgroundProps {
     theme: CountryTheme;
 }
 
-const BLOB_POSITIONS = [
-    { top: "8%", left: "5%", size: "55vw" },
-    { top: "18%", left: "62%", size: "48vw" },
-    { top: "58%", left: "28%", size: "52vw" },
+const BASE_BLOB_POSITIONS = [
+    { top: 6, left: 4, size: 58 },
+    { top: 20, left: 64, size: 50 },
+    { top: 62, left: 22, size: 54 },
 ] as const;
 
 export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
-    const [c0, c1] = theme.washColors;
+    const [c0, c1, c2] = theme.washColors;
 
     return (
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
-            {/* Luminous base */}
             <div
                 className="absolute inset-0 transition-colors duration-[3000ms]"
                 style={{ backgroundColor: "#FAFAF8" }}
             />
 
-            {/* Soft diagonal wash — kept subtle so foreground text stays readable */}
+            {/* Country-specific diagonal blend */}
             <div
-                className="absolute inset-0 opacity-25 transition-opacity duration-[3000ms]"
+                className="absolute inset-0 transition-all duration-[3000ms]"
                 style={{
-                    background: `linear-gradient(135deg, ${c0}66 0%, ${c1}44 45%, #FAFAF8 100%)`,
+                    opacity: 0.72,
+                    background: `linear-gradient(${theme.gradientAngle}deg, ${c0} 0%, ${c1} 38%, ${c2} 72%, #FAFAF8 100%)`,
                 }}
             />
 
-            {/* Liquid color blooms */}
+            {/* Liquid blooms — position shifts per country */}
             {theme.washColors.map((color, index) => {
-                const pos = BLOB_POSITIONS[index] ?? BLOB_POSITIONS[2];
+                const base = BASE_BLOB_POSITIONS[index] ?? BASE_BLOB_POSITIONS[2];
+                const offset = theme.blobOffsets[index] ?? { top: 0, left: 0 };
                 return (
                     <div
                         key={`${theme.countryIso}-${index}`}
                         className="absolute rounded-full liquid-blob transition-all duration-[3000ms]"
                         style={{
-                            top: pos.top,
-                            left: pos.left,
-                            width: pos.size,
-                            height: pos.size,
+                            top: `calc(${base.top + offset.top}%)`,
+                            left: `calc(${base.left + offset.left}%)`,
+                            width: `${base.size}vw`,
+                            height: `${base.size}vw`,
                             backgroundColor: color,
-                            opacity: 0.18,
-                            filter: "blur(100px)",
+                            opacity: index === 0 ? 0.42 : 0.34,
+                            filter: "blur(88px)",
                             animationDelay: `${index * 4}s`,
                         }}
                     />
                 );
             })}
 
-            {/* Center lift — keeps the main content zone closer to neutral white */}
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_35%,rgba(255,255,255,0.85)_0%,transparent_70%)] pointer-events-none" />
+            {/* Light veil over content zone — readable text without erasing country color */}
+            <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_55%_at_50%_32%,rgba(255,255,255,0.42)_0%,transparent_68%)] pointer-events-none" />
 
-            {/* Liquid sheen */}
-            <div className="absolute inset-0 bg-gradient-to-br from-white/50 via-transparent to-transparent opacity-60 pointer-events-none" />
+            <div className="absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent opacity-50 pointer-events-none" />
         </div>
     );
 }

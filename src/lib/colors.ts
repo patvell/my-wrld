@@ -81,7 +81,7 @@ export function desaturateHex(hex: string, amount: number): string {
 }
 
 /** Soft pastel wash for light liquid backgrounds. Black becomes warm grey. */
-export function pastelizeHex(hex: string): string {
+export function pastelizeHex(hex: string, whiteMix = 0.75): string {
     const rgb = hexToRgb(hex);
     if (!rgb) return "#F0EDE8";
 
@@ -90,8 +90,28 @@ export function pastelizeHex(hex: string): string {
         return "#E8E6E3";
     }
 
-    const washed = mixWithWhite(hex, 0.75);
-    return desaturateHex(washed, 0.15);
+    const washed = mixWithWhite(hex, whiteMix);
+    return desaturateHex(washed, 0.1);
+}
+
+/** Richer pastel for background washes — more color, still light. */
+export function pastelizeForBackground(hex: string): string {
+    return pastelizeHex(hex, 0.58);
+}
+
+export function darkenHex(hex: string, amount: number): string {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+    const t = Math.max(0, Math.min(1, amount));
+    return rgbToHex(rgb.r * (1 - t), rgb.g * (1 - t), rgb.b * (1 - t));
+}
+
+export function isNeutralFlagColor(hex: string): boolean {
+    const lum = getLuminanceFromHex(hex);
+    const rgb = hexToRgb(hex);
+    if (!rgb) return true;
+    const spread = Math.max(rgb.r, rgb.g, rgb.b) - Math.min(rgb.r, rgb.g, rgb.b);
+    return lum > 0.88 || spread < 18;
 }
 
 export function blendHex(a: string, b: string, ratio: number): string {
@@ -114,7 +134,7 @@ export function getEffectiveBackground(washColors: string[]): string {
 
     let blended = LIGHT_BASE;
     for (const color of washColors) {
-        blended = blendHex(blended, color, 0.22);
+        blended = blendHex(blended, color, 0.32);
     }
     return blended;
 }
