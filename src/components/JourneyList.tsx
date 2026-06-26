@@ -48,14 +48,26 @@ export default function JourneyList({
   return (
     <>
       {journeys.map((journey, jIdx) => (
-        <div key={`${keyPrefix}-journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
+        // Stable key based on the journey's first flight so cards are not
+        // remounted (and re-animated from hidden) when journeys are regrouped
+        // after adding/removing a flight.
+        <div
+          key={`${keyPrefix}-${journey[0]?.id ?? jIdx}`}
+          className="w-full max-w-sm flex flex-col gap-0"
+        >
           {journey.map((flight, fIdx) => {
             const nextFlight = journey[fIdx + 1];
             const layover = nextFlight ? isLayoverBetween(flight, nextFlight) : false;
 
             return (
               <React.Fragment key={flight.id}>
-                <motion.div variants={cardVariants} layout className="w-full relative z-20">
+                <motion.div
+                  variants={cardVariants}
+                  initial="hidden"
+                  animate="show"
+                  layout
+                  className="w-full relative z-20"
+                >
                   <DigitalBoardingPass
                     flight={flight}
                     onDelete={onDelete}
@@ -69,6 +81,8 @@ export default function JourneyList({
                 {fIdx < journey.length - 1 && (
                   <motion.div
                     variants={cardVariants}
+                    initial="hidden"
+                    animate="show"
                     className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
                   >
                     <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
