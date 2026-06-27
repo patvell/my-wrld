@@ -156,14 +156,15 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 onClick={activate}
                 onKeyDown={handleKeyDown}
                 className={cn(
-                    "relative w-full h-full glass-dark rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    "relative w-full h-full rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    isFullExperience ? "glass-dark" : "bg-neutral-950/90 border-white/10",
                     statusColor,
                     imminent && "animate-pulse-slow",
                     isShifted && "shadow-none"
                 )}
                 whileTap={{ scale: 0.98 }}
             >
-                <div className="flex-1 p-5 flex flex-row items-center justify-between bg-black/55 relative">
+                <div className={cn("flex-1 p-5 flex flex-row items-center justify-between relative", isFullExperience ? "bg-black/55" : "bg-black/75")}>
 
                     {/* LEFT: Origin */}
                     <div className="flex flex-col items-start justify-between h-full z-10 w-1/3 py-1">

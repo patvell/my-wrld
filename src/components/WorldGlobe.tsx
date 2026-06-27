@@ -14,6 +14,9 @@ import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 const HOME_BASE = "DXB";
 const TILT_LIMIT = (35 * Math.PI) / 180;
 const AUTO_ROTATE_RESUME_MS = 3000;
+const DESKTOP_GLOBE_ALTITUDE = 3.2;
+/** Higher altitude zooms out; ~40% smaller globe vs previous mobile default of 4.0 */
+const MOBILE_GLOBE_ALTITUDE = 6.7;
 
 interface WorldGlobeProps {
   flights: Flight[];
@@ -51,13 +54,17 @@ function getDimensions(isMobile: boolean) {
   };
 }
 
+function getGlobeAltitude(isMobile: boolean) {
+  return isMobile ? MOBILE_GLOBE_ALTITUDE : DESKTOP_GLOBE_ALTITUDE;
+}
+
 export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
   const { isMobile, isFullExperience, prefersReducedMotion } = usePerformanceTier();
   const globeRef = useRef<GlobeMethods | null>(null);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsConfiguredRef = useRef(false);
   const configureAttemptsRef = useRef(0);
-  const [dimensions, setDimensions] = useState(() => getDimensions(false));
+  const [dimensions, setDimensions] = useState(() => getDimensions(isMobile));
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
@@ -201,10 +208,15 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
 
   const setInitialPointOfView = useCallback(
     (globe: GlobeMethods) => {
-      globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
+      globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: getGlobeAltitude(isMobile) }, 0);
     },
     [isMobile],
   );
+
+  useEffect(() => {
+    if (!globeInitialized || !globeRef.current) return;
+    setInitialPointOfView(globeRef.current);
+  }, [globeInitialized, isMobile, setInitialPointOfView]);
 
   const tryConfigureGlobe = useCallback(() => {
     const globe = globeRef.current;
