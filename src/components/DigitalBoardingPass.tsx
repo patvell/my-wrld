@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
 import { AIRLINE_CODE, FLIGHTAWARE_CARRIER } from "@/lib/config";
 import type { LiveStatus } from "@/lib/aeroMapper";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
 interface BoardingPassProps {
     flight: Flight;
@@ -17,6 +18,7 @@ interface BoardingPassProps {
 }
 
 export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false }: BoardingPassProps) {
+    const { isFullExperience } = usePerformanceTier();
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [live, setLive] = useState<LiveStatus | null>(null);
     const flightNumber = flight.flight_number ? flight.flight_number.replace(/^\D+/g, '') : "---";
@@ -112,7 +114,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     onClick={handleEdit}
                     aria-label={`Edit flight ${flight.origin_code} to ${flight.destination_code}`}
                     tabIndex={isShifted ? 0 : -1}
-                    className="w-12 h-12 rounded-full flex items-center justify-center bg-black/40 backdrop-blur-md border border-white/10 text-white hover:bg-white/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                    className="w-12 h-12 rounded-full flex items-center justify-center glass-solid text-white hover:bg-white/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
                     {isConfirmingDelete ? <X size={18} /> : <Edit size={18} />}
                 </motion.button>
@@ -132,7 +134,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     aria-label={isConfirmingDelete ? "Confirm delete flight" : `Delete flight ${flight.origin_code} to ${flight.destination_code}`}
                     tabIndex={isShifted ? 0 : -1}
                     className={cn(
-                        "w-12 h-12 rounded-full flex items-center justify-center backdrop-blur-md border border-white/10 text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                        "w-12 h-12 rounded-full flex items-center justify-center glass-solid text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                         !isConfirmingDelete && "hover:bg-white/10",
                         isConfirmingDelete && "hover:bg-red-600/90 border-red-400/50"
                     )}
@@ -161,7 +163,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 )}
                 whileTap={{ scale: 0.98 }}
             >
-                <div className="flex-1 p-5 flex flex-row items-center justify-between bg-black/40 backdrop-blur-md relative">
+                <div className="flex-1 p-5 flex flex-row items-center justify-between bg-black/55 relative">
 
                     {/* LEFT: Origin */}
                     <div className="flex flex-col items-start justify-between h-full z-10 w-1/3 py-1">
@@ -207,12 +209,14 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                         animate={{ width: `${Math.max(0, Math.min(100, live.progress_percent))}%` }}
                                         transition={{ duration: 0.6, ease: "easeOut" }}
                                     />
-                                ) : !past ? (
+                                ) : !past && (isActive || imminent) && isFullExperience ? (
                                     <motion.div
                                         className="absolute inset-y-0 left-0 w-1/3 bg-white/60 blur-[1px]"
                                         animate={{ x: ["-100%", "300%"] }}
                                         transition={{ duration: 2.5, repeat: Infinity, ease: "linear" }}
                                     />
+                                ) : !past ? (
+                                    <div className="absolute inset-y-0 left-0 w-1/3 bg-white/30" />
                                 ) : (
                                     <div className="absolute inset-y-0 left-0 w-full bg-white/20" />
                                 )}

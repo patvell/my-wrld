@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
@@ -6,6 +6,7 @@ import { getAirportTimezone, AIRPORTS } from "@/data/airports";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { getReadableTextColors } from "@/lib/colors";
 import { PERSONA_SPRING, PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -17,6 +18,85 @@ interface GlobalPulseProps {
     isLoading?: boolean;
 }
 
+function msUntilNextMinute() {
+    const now = new Date();
+    return (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+}
+
+function useMinuteClock() {
+    const [now, setNow] = useState<Date | null>(null);
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout>;
+
+        const tick = () => {
+            setNow(new Date());
+            timer = setTimeout(tick, msUntilNextMinute());
+        };
+
+        tick();
+        return () => clearTimeout(timer);
+    }, []);
+
+    return now;
+}
+
+interface ClockDisplayProps {
+    now: Date | null;
+    timezone: string;
+    textColor: string;
+    useFrostedChrome: boolean;
+}
+
+const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useFrostedChrome }: ClockDisplayProps) {
+    const time = now
+        ? new Intl.DateTimeFormat("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: timezone,
+          }).format(now)
+        : "--:--";
+
+    return (
+        <h1
+            className="text-8xl font-medium tracking-tighter leading-none"
+            style={{
+                color: textColor,
+                transition: `color ${PLACE_TRANSITION_CSS}`,
+                textShadow: useFrostedChrome
+                    ? "0 1px 2px rgba(255,255,255,0.9), 0 0 40px rgba(255,255,255,0.5)"
+                    : "0 2px 12px rgba(0,0,0,0.25)",
+            }}
+        >
+            {time}
+        </h1>
+    );
+});
+
+interface SmallClockProps {
+    now: Date | null;
+    timezone: string;
+    textColor: string;
+}
+
+const SmallClock = memo(function SmallClock({ now, timezone, textColor }: SmallClockProps) {
+    const time = now
+        ? new Intl.DateTimeFormat("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+              timeZone: timezone,
+          }).format(now)
+        : "--:--";
+
+    return (
+        <span className="text-xs font-bold" style={{ color: textColor, transition: `color ${PLACE_TRANSITION_CSS}` }}>
+            {time}
+        </span>
+    );
+});
+
 export default function GlobalPulse({
     partnerCity = "Montreal",
     partnerCode = "YUL",
@@ -26,7 +106,8 @@ export default function GlobalPulse({
     onTogglePersona,
     isLoading = false,
 }: GlobalPulseProps) {
-    const [now, setNow] = useState<Date | null>(null);
+    const { isFullExperience } = usePerformanceTier();
+    const now = useMinuteClock();
 
     const currentLocationCode = persona === "home" ? partnerCode : faCode;
     const countryTheme = getCountryTheme(currentLocationCode);
@@ -36,23 +117,6 @@ export default function GlobalPulse({
 
     const partnerTimezone = getAirportTimezone(partnerCode);
     const faTimezone = getAirportTimezone(faCode);
-
-    useEffect(() => {
-        const update = () => setNow(new Date());
-        update();
-        const timer = setInterval(update, 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    const formatTime = (timezone: string) => {
-        if (!now) return "--:--";
-        return new Intl.DateTimeFormat("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-            timeZone: timezone,
-        }).format(now);
-    };
 
     const formatDate = (timezone: string) => {
         if (!now) return "...";
@@ -81,6 +145,10 @@ export default function GlobalPulse({
 
     const bigTz = persona === "plane" ? faTimezone : partnerTimezone;
     const smallTz = persona === "plane" ? partnerTimezone : faTimezone;
+    const mainTimezone = persona === "plane" ? faTimezone : partnerTimezone;
+    const altTimezone = persona === "plane" ? partnerTimezone : faTimezone;
+
+    const PersonaToggle = isFullExperience ? motion.div : "div";
 
     return (
         <div
@@ -147,18 +215,12 @@ export default function GlobalPulse({
                             )}
                         </div>
 
-                        <h1
-                            className="text-8xl font-medium tracking-tighter leading-none"
-                            style={{
-                                color: textColor,
-                                ...colorTransition,
-                                textShadow: useFrostedChrome
-                                    ? "0 1px 2px rgba(255,255,255,0.9), 0 0 40px rgba(255,255,255,0.5)"
-                                    : "0 2px 12px rgba(0,0,0,0.25)",
-                            }}
-                        >
-                            {persona === "plane" ? formatTime(faTimezone) : formatTime(partnerTimezone)}
-                        </h1>
+                        <ClockDisplay
+                            now={now}
+                            timezone={mainTimezone}
+                            textColor={textColor}
+                            useFrostedChrome={useFrostedChrome}
+                        />
 
                         <span
                             className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
@@ -166,9 +228,7 @@ export default function GlobalPulse({
                         >
                             {now ? (
                                 <>
-                                    {persona === "plane"
-                                        ? formatDate(faTimezone)
-                                        : formatDate(partnerTimezone)}
+                                    {formatDate(mainTimezone)}
                                     <span className="opacity-50">•</span>
                                     <span>{getTimeDiffText(bigTz, smallTz)}</span>
                                 </>
@@ -180,10 +240,14 @@ export default function GlobalPulse({
                 </AnimatePresence>
             </div>
 
-            <motion.div
-                animate={{ scale: [1, 1.03, 1] }}
-                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
-                whileTap={{ scale: 0.95 }}
+            <PersonaToggle
+                {...(isFullExperience
+                    ? {
+                          animate: { scale: [1, 1.03, 1] },
+                          transition: { duration: 5, repeat: Infinity, ease: "easeInOut" },
+                          whileTap: { scale: 0.95 },
+                      }
+                    : {})}
                 onClick={onTogglePersona}
                 className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10"
                 style={{
@@ -192,12 +256,11 @@ export default function GlobalPulse({
                 }}
             >
                 <div className="flex flex-col items-end">
-                    <span
-                        className="text-xs font-bold"
-                        style={{ color: useFrostedChrome ? onFrosted : textColor, ...colorTransition }}
-                    >
-                        {persona === "plane" ? formatTime(partnerTimezone) : formatTime(faTimezone)}
-                    </span>
+                    <SmallClock
+                        now={now}
+                        timezone={altTimezone}
+                        textColor={useFrostedChrome ? onFrosted : textColor}
+                    />
                     <span
                         className="text-[9px] font-bold tracking-wider"
                         style={{
@@ -217,7 +280,7 @@ export default function GlobalPulse({
                 >
                     {persona === "plane" ? <Home size={18} /> : <Plane size={18} />}
                 </div>
-            </motion.div>
+            </PersonaToggle>
         </div>
     );
 }

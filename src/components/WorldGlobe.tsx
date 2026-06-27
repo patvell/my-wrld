@@ -9,6 +9,7 @@ import { AIRPORTS } from "@/data/airports";
 import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
 const HOME_BASE = "DXB";
 const TILT_LIMIT = (35 * Math.PI) / 180;
@@ -41,40 +42,42 @@ function isReturnToHome(flight: Flight): boolean {
   return flight.destination_code === HOME_BASE;
 }
 
-function getDimensions() {
+function getDimensions(isMobile: boolean) {
   if (typeof window === "undefined") return { width: 390, height: 844 };
-  return { width: window.innerWidth, height: window.innerHeight };
+  const scale = isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio;
+  return {
+    width: Math.floor(window.innerWidth * scale),
+    height: Math.floor(window.innerHeight * scale),
+  };
 }
 
 export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
+  const { isMobile, isFullExperience, prefersReducedMotion } = usePerformanceTier();
   const globeRef = useRef<GlobeMethods | null>(null);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsConfiguredRef = useRef(false);
   const configureAttemptsRef = useRef(0);
-  const [dimensions, setDimensions] = useState(getDimensions);
+  const [dimensions, setDimensions] = useState(() => getDimensions(false));
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
 
-  const prefersReducedMotion = useMemo(
-    () =>
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-    [],
-  );
+  useEffect(() => {
+    setDimensions(getDimensions(isMobile));
+  }, [isMobile]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const update = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => setDimensions(getDimensions()), 150);
+      timer = setTimeout(() => setDimensions(getDimensions(isMobile)), 150);
     };
     window.addEventListener("resize", update);
     return () => {
       clearTimeout(timer);
       window.removeEventListener("resize", update);
     };
-  }, []);
+  }, [isMobile]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,7 +112,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   const points = useMemo(() => {
     const seen = new Set<string>();
     const pts: PointDatum[] = [];
-    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+    const isMobileDevice = isMobile;
 
     flights.forEach((f) => {
       const past = isPast(f);
@@ -119,7 +122,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
           const ap = AIRPORTS[code];
           if (ap && ap.lat !== undefined && ap.lng !== undefined) {
             let size = past ? 0.45 : 0.25;
-            size *= isMobile ? 2.5 : 1.5;
+            size *= isMobileDevice ? 2.5 : 1.5;
             pts.push({
               lat: ap.lat,
               lng: ap.lng,
@@ -132,7 +135,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       });
     });
     return pts;
-  }, [flights]);
+  }, [flights, isMobile]);
 
   const handleGlobeClick = useCallback(
     ({ lat, lng }: { lat: number; lng: number }) => {
@@ -156,10 +159,10 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   );
 
   const resumeAutoRotate = useCallback(() => {
-    if (!globeRef.current) return;
+    if (!globeRef.current || !isFullExperience || prefersReducedMotion) return;
     const controls = globeRef.current.controls();
     if (controls) controls.autoRotate = true;
-  }, []);
+  }, [isFullExperience, prefersReducedMotion]);
 
   const scheduleAutoRotateResume = useCallback(() => {
     if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
@@ -178,14 +181,11 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       const controls = globe.controls();
       if (!controls) return false;
 
-      controls.autoRotate = !prefersReducedMotion;
+      controls.autoRotate = isFullExperience && !prefersReducedMotion;
       controls.autoRotateSpeed = 0.3;
       enforceGlobeRestrictions(controls);
 
       if (!controlsConfiguredRef.current) {
-        controls.addEventListener("change", () => {
-          enforceGlobeRestrictions(controls);
-        });
         controls.addEventListener("start", () => {
           controls.autoRotate = false;
           if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
@@ -196,13 +196,15 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
 
       return !controls.enableZoom;
     },
-    [enforceGlobeRestrictions, prefersReducedMotion, scheduleAutoRotateResume],
+    [enforceGlobeRestrictions, isFullExperience, prefersReducedMotion, scheduleAutoRotateResume],
   );
 
-  const setInitialPointOfView = useCallback((globe: GlobeMethods) => {
-    const isMobile = window.innerWidth < 768;
-    globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
-  }, []);
+  const setInitialPointOfView = useCallback(
+    (globe: GlobeMethods) => {
+      globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
+    },
+    [isMobile],
+  );
 
   const tryConfigureGlobe = useCallback(() => {
     const globe = globeRef.current;
@@ -242,7 +244,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       if (tryConfigureGlobe()) return;
 
       configureAttemptsRef.current += 1;
-      if (configureAttemptsRef.current < 120) {
+      if (configureAttemptsRef.current < 40) {
         window.setTimeout(retryConfigure, 50);
       }
     };
@@ -315,7 +317,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     <div className="relative w-full h-full">
       <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-4 pointer-events-none text-white">
         <div
-          className="flex items-center gap-4 px-5 py-2 rounded-full glass-dark border border-white/10 backdrop-blur-md"
+          className="flex items-center gap-4 px-5 py-2 rounded-full glass-dark border border-white/10"
           aria-label={`${uniqueAirportCount} airports, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
         >
           <StatPill value={uniqueAirportCount} label="Airports" />
@@ -347,7 +349,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
             height={dimensions.height}
             backgroundColor="rgba(0,0,0,0)"
             globeMaterial={material}
-            showGraticules={true}
+            showGraticules={isFullExperience}
             showAtmosphere={false}
             onGlobeReady={handleGlobeReady}
             onGlobeClick={handleGlobeClick}

@@ -1,10 +1,10 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import GlobalPulse from "@/components/GlobalPulse";
 import PillMenu from "@/components/PillMenu";
 import AddTripModal from "@/components/AddTripModal";
-import WorldGlobe from "@/components/WorldGlobe";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import JourneyList from "@/components/JourneyList";
@@ -19,10 +19,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { History, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useThemeColor } from "@/hooks/useThemeColor";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import { cn } from "@/lib/utils";
-import { preloadGlobeModule } from "@/lib/preloadGlobe";
+
+const WorldGlobe = dynamic(() => import("@/components/WorldGlobe"), { ssr: false });
 
 export default function Home() {
+  const { isFullExperience } = usePerformanceTier();
   const [[activeTab, direction], setActiveTab] = useState<["home" | "history" | "settings" | "world", number]>(["home", 0]);
   const [flights, setFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,10 +62,6 @@ export default function Home() {
 
   useEffect(() => {
     fetchFlights();
-  }, []);
-
-  useEffect(() => {
-    preloadGlobeModule();
   }, []);
 
   const fetchFlights = async () => {
@@ -147,29 +146,61 @@ export default function Home() {
     setActiveOpenCardId((prev) => (prev === id ? null : id));
   };
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.02 } },
-    exit: { opacity: 0, transition: { duration: 0.2, ease: "easeInOut" as const } },
-  };
+  const containerVariants = useMemo(
+    () => ({
+      hidden: { opacity: 0 },
+      show: {
+        opacity: 1,
+        transition: isFullExperience
+          ? { staggerChildren: 0.08, delayChildren: 0.02 }
+          : { staggerChildren: 0, delayChildren: 0, duration: 0.2 },
+      },
+      exit: { opacity: 0, transition: { duration: 0.2, ease: "easeInOut" as const } },
+    }),
+    [isFullExperience],
+  );
 
-  const cardVariants = {
-    hidden: { y: 20, opacity: 0, scale: 0.95, filter: "blur(4px)" },
-    show: {
-      y: 0,
-      opacity: 1,
-      scale: 1,
-      filter: "blur(0px)",
-      transition: { type: "spring" as const, stiffness: 150, damping: 20, mass: 0.8 },
-    },
-    exit: {
-      y: -20,
-      opacity: 0,
-      scale: 0.95,
-      filter: "blur(4px)",
-      transition: { duration: 0.15, ease: "easeIn" as const },
-    },
-  };
+  const cardVariants = useMemo(
+    () =>
+      isFullExperience
+        ? {
+            hidden: { y: 20, opacity: 0, scale: 0.95, filter: "blur(4px)" },
+            show: {
+              y: 0,
+              opacity: 1,
+              scale: 1,
+              filter: "blur(0px)",
+              transition: { type: "spring" as const, stiffness: 150, damping: 20, mass: 0.8 },
+            },
+            exit: {
+              y: -20,
+              opacity: 0,
+              scale: 0.95,
+              filter: "blur(4px)",
+              transition: { duration: 0.15, ease: "easeIn" as const },
+            },
+          }
+        : {
+            hidden: { y: 12, opacity: 0 },
+            show: { y: 0, opacity: 1, transition: { duration: 0.2, ease: "easeOut" as const } },
+            exit: { y: -12, opacity: 0, transition: { duration: 0.12, ease: "easeIn" as const } },
+          },
+    [isFullExperience],
+  );
+
+  const homeScrollMask = isFullExperience
+    ? {
+        maskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
+      }
+    : undefined;
+
+  const historyScrollMask = isFullExperience
+    ? {
+        maskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
+        WebkitMaskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
+      }
+    : undefined;
 
   useThemeColor(countryTheme.themeColor);
 
@@ -177,7 +208,7 @@ export default function Home() {
     <motion.main
       initial={{ opacity: 0 }}
       animate={{ opacity: isReady ? 1 : 0 }}
-      transition={{ duration: 1.5, ease: "easeInOut" }}
+      transition={{ duration: 0.4, ease: "easeInOut" }}
       className={cn(
         "h-[100dvh] min-h-[100dvh] w-full font-sans selection:bg-emirates-red/30 relative overflow-hidden flex flex-col",
         isLightBg ? "text-neutral-900" : "text-white"
@@ -254,7 +285,6 @@ export default function Home() {
           {activeTab === "world" ? (
             <motion.div
               key="world"
-              layout
               variants={containerVariants}
               initial="hidden"
               animate="show"
@@ -266,16 +296,12 @@ export default function Home() {
           ) : activeTab === "home" ? (
             <motion.div
               key="home"
-              layout
               variants={containerVariants}
               initial="hidden"
               animate="show"
               exit="exit"
               className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[420px] px-4 pb-40 flex flex-col items-center gap-6"
-              style={{
-                maskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
-              }}
+              style={homeScrollMask}
             >
               {loading ? (
                 <div className="flex flex-col gap-6 w-full items-center">
@@ -308,16 +334,12 @@ export default function Home() {
           ) : (
             <motion.div
               key="history"
-              layout
               variants={containerVariants}
               initial="hidden"
               animate="show"
               exit="exit"
               className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-24 px-4 pb-32 flex flex-col items-center gap-6"
-              style={{
-                maskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
-              }}
+              style={historyScrollMask}
             >
               {loading ? (
                 <div className="flex flex-col gap-6 w-full items-center">

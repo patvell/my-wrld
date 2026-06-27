@@ -4,12 +4,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { CountryTheme } from "@/types/countryTheme";
 import { hexToRgba } from "@/lib/colors";
 import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
 interface LiquidBackgroundProps {
     theme: CountryTheme;
 }
 
-function BackgroundLayer({ theme }: { theme: CountryTheme }) {
+function BackgroundLayer({
+    theme,
+    showBlobs,
+    blobBlurPx,
+}: {
+    theme: CountryTheme;
+    showBlobs: boolean;
+    blobBlurPx: number;
+}) {
     const [c0, c1, c2] = theme.washColors;
     const veil = theme.contentVeil;
 
@@ -43,7 +52,8 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
                 }}
             />
 
-            {theme.blobConfigs.map((blob, index) => (
+            {showBlobs &&
+                theme.blobConfigs.map((blob, index) => (
                 <div
                     key={`${theme.countryIso}-blob-${index}`}
                     className="absolute rounded-full liquid-blob"
@@ -54,7 +64,7 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
                         height: `${blob.size}vw`,
                         backgroundColor: blob.color,
                         opacity: blob.opacity,
-                        filter: "blur(96px)",
+                        filter: `blur(${blobBlurPx}px)`,
                         animationDuration: `${blob.duration}s`,
                         animationDelay: `${blob.delay}s`,
                     }}
@@ -74,6 +84,11 @@ function BackgroundLayer({ theme }: { theme: CountryTheme }) {
 }
 
 export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
+    const { isFullExperience } = usePerformanceTier();
+    const showBlobs = isFullExperience;
+    const blobBlurPx = isFullExperience ? 96 : 40;
+    const enableCrossfade = isFullExperience;
+
     const [settledTheme, setSettledTheme] = useState(theme);
     const [incomingTheme, setIncomingTheme] = useState(theme);
     const [overlayOpacity, setOverlayOpacity] = useState(0);
@@ -159,6 +174,11 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
             return;
         }
 
+        if (!enableCrossfade) {
+            commitSettled(theme);
+            return;
+        }
+
         if (theme.countryIso === settledIsoRef.current && isCrossfadingRef.current) {
             // Toggled back before prior crossfade finished — must crossfade, not snap
             startCrossfade(theme);
@@ -170,7 +190,7 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
         }
 
         return cancelPendingRaf;
-    }, [theme]);
+    }, [theme, enableCrossfade]);
 
     const handleOverlayTransitionEnd = (
         event: React.TransitionEvent<HTMLDivElement>
@@ -187,10 +207,10 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
     return (
         <div className="fixed inset-0 overflow-hidden pointer-events-none">
             <div className="absolute inset-0">
-                <BackgroundLayer theme={settledTheme} />
+                <BackgroundLayer theme={settledTheme} showBlobs={showBlobs} blobBlurPx={blobBlurPx} />
             </div>
 
-            {isCrossfading && (
+            {enableCrossfade && isCrossfading && (
                 <div
                     className="absolute inset-0"
                     style={{
@@ -201,7 +221,7 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
                     }}
                     onTransitionEnd={handleOverlayTransitionEnd}
                 >
-                    <BackgroundLayer theme={incomingTheme} />
+                    <BackgroundLayer theme={incomingTheme} showBlobs={showBlobs} blobBlurPx={blobBlurPx} />
                 </div>
             )}
         </div>
