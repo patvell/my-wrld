@@ -8,7 +8,6 @@ import AddTripModal from "@/components/AddTripModal";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import JourneyList from "@/components/JourneyList";
-import ScrollHeaderScrim from "@/components/ScrollHeaderScrim";
 import { Flight, FlightInput, PersonaMode } from "@/types";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCurrentLocation, isPast } from "@/lib/time";
@@ -225,7 +224,7 @@ export default function Home() {
     WebkitMaskSize: "100% 100%",
   } as const;
 
-  useThemeColor(countryTheme.themeColor);
+  useThemeColor(countryTheme.effectiveBg);
 
   return (
     <motion.main
@@ -266,9 +265,7 @@ export default function Home() {
 
       <AnimatePresence>
         {activeTab === "home" && (
-          <>
-            <ScrollHeaderScrim className="top-[320px] h-[100px]" />
-            <motion.div
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -279,15 +276,12 @@ export default function Home() {
               <div className={cn("h-[1px] flex-1 ml-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
             </div>
           </motion.div>
-          </>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {activeTab === "history" && (
-          <>
-            <ScrollHeaderScrim className="top-0 h-[80px]" />
-            <motion.div
+          <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -305,7 +299,6 @@ export default function Home() {
               </button>
             </div>
           </motion.div>
-          </>
         )}
       </AnimatePresence>
 
