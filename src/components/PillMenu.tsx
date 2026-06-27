@@ -2,13 +2,8 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { Map, History, Plus, Compass, Globe } from "lucide-react";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import { History, Plus, Compass, Globe } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface PillMenuProps {
     activeTab: "home" | "history" | "settings" | "world";

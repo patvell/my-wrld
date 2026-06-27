@@ -1,27 +1,22 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import GlobalPulse from "@/components/GlobalPulse";
-import DigitalBoardingPass from "@/components/DigitalBoardingPass";
 import PillMenu from "@/components/PillMenu";
 import AddTripModal from "@/components/AddTripModal";
 import WorldGlobe from "@/components/WorldGlobe";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
-import { Flight, PersonaMode } from "@/types";
-import { getAirportColor, getAirportTimezone } from "@/data/airports";
+import JourneyList from "@/components/JourneyList";
+import { Flight, FlightInput, PersonaMode } from "@/types";
+import { getAirportColor } from "@/data/airports";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
+import { getCurrentLocation, isPast } from "@/lib/time";
+import { PARTNER_CITY, PARTNER_CODE } from "@/lib/config";
 import { motion, AnimatePresence } from "framer-motion";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-import { History, ArrowUpDown, Undo2, Moon } from "lucide-react";
+import { History, ArrowUpDown } from "lucide-react";
+import { toast } from "sonner";
 import { useThemeColor } from "@/hooks/useThemeColor";
-
-function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-
-
 
 export default function Home() {
   const [[activeTab, direction], setActiveTab] = useState<["home" | "history" | "settings" | "world", number]>(["home", 0]);
@@ -30,142 +25,27 @@ export default function Home() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
   const [currentPersona, setCurrentPersona] = useState<PersonaMode>("plane");
-  const [historySortAsc, setHistorySortAsc] = useState(false); // Default false = Newest (most recent) to Oldest
+  const [historySortAsc, setHistorySortAsc] = useState(false);
   const [activeOpenCardId, setActiveOpenCardId] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const [isReady, setIsReady] = useState(false);
 
-  // Update 'now' every minute to ensure location status (in-air vs landed) stays accurate
-  React.useEffect(() => {
-    // Sync with minute
+  // Update 'now' every minute so live status (in-air vs landed) stays accurate.
+  useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
-  // Helper to get current wall clock time in a specific timezone as ISO-like string YYYY-MM-DDTHH:mm
-  const getWallClock = (timezone: string) => {
-    // We use Sweden/Canada locale to get YYYY-MM-DD format usually, but strict format is better
-    const options: Intl.DateTimeFormatOptions = {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false
-    };
-    // formatToParts is reliable
-    const parts = new Intl.DateTimeFormat('en-CA', options).formatToParts(new Date());
-    const part = (type: string) => parts.find(p => p.type === type)?.value;
-    return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}`;
-  };
-
-  const getCurrentLocation = () => {
-    if (flights.length === 0) return { code: "DXB", city: "Dubai" };
-
-    // We need to sort flights. Since we are comparing wall clocks, we assume departure_time is ISO string.
-    const sortedFlights = [...flights].sort((a, b) => a.departure_time.localeCompare(b.departure_time));
-
-    // Find the current active flight
-    const activeFlight = sortedFlights.find(f => {
-      const originTz = getAirportTimezone(f.origin_code);
-      const destTz = getAirportTimezone(f.destination_code);
-
-      const nowOrigin = getWallClock(originTz);
-      const nowDest = getWallClock(destTz);
-
-      // Has departed? (Current Origin Time >= Scheduled Departure)
-      const hasDeparted = nowOrigin >= f.departure_time;
-      // Has arrived? (Current Dest Time >= Scheduled Arrival)
-      // Note: This logic assumes Arrival Time in Flight Object is "Destination Wall Clock Time"
-      const hasArrived = nowDest >= f.arrival_time;
-
-      return hasDeparted && !hasArrived;
-    });
-
-    if (activeFlight) {
-      return { code: activeFlight.origin_code, city: activeFlight.origin_city };
-    }
-
-    // Find last completed flight
-    // We iterate backwards
-    for (let i = sortedFlights.length - 1; i >= 0; i--) {
-      const f = sortedFlights[i];
-      const destTz = getAirportTimezone(f.destination_code);
-      const nowDest = getWallClock(destTz);
-      if (nowDest >= f.arrival_time) {
-        return { code: f.destination_code, city: f.destination_city };
-      }
-    }
-
-    // If no active and no completed, return origin of first flight
-    const first = sortedFlights[0];
-    return { code: first.origin_code, city: first.origin_city };
-  };
-
-  /* 
-   * Helper to check if flight has "Arrived" for the purpose of moving to History tab.
-   * Requirement: Move to history 2 hours AFTER landing.
-   */
-  const hasFlightArrived = (flight: Flight) => {
-    const destTz = getAirportTimezone(flight.destination_code);
-    const nowDest = getWallClock(destTz);
-
-    // We can't just compare ISO strings directly for "2 hours later" easily without parsing
-    // But since we are using wall clock ISO strings, let's parse them back to Date objects 
-    // strictly for comparison. We treat them as if they are UTC to avoid browser timezone shifts.
-    // Clean string of any Z or offsets to treat as abstract wall clock
-    const cleanIso = flight.arrival_time.replace(/Z$|[+-]\d{2}:?\d{2}$/, '');
-    const arrivalDate = new Date(cleanIso + "Z"); // Treat as UTC
-    const nowDestDate = new Date(nowDest + "Z");
-
-    const twoHoursAfter = new Date(arrivalDate.getTime() + 2 * 60 * 60 * 1000);
-
-    return nowDestDate >= twoHoursAfter;
-  };
-
-  /*
-   * Helper to check if flight is "Active" (Live Tracking Mode).
-   * Requirement: Active from 3 hours BEFORE departure until 2 hours AFTER arrival.
-   * During this time, card has white hue and tapping opens FlightAware.
-   */
-  const getFlightStatus = (flight: Flight) => {
-    const originTz = getAirportTimezone(flight.origin_code);
-    const destTz = getAirportTimezone(flight.destination_code);
-
-    const nowOrigin = getWallClock(originTz);
-    const nowDest = getWallClock(destTz);
-
-    // Clean strings
-    const cleanDep = flight.departure_time.replace(/Z$|[+-]\d{2}:?\d{2}$/, '');
-    const cleanArr = flight.arrival_time.replace(/Z$|[+-]\d{2}:?\d{2}$/, '');
-
-    const depDate = new Date(cleanDep + "Z");
-    const arrDate = new Date(cleanArr + "Z");
-    const nowOriginDate = new Date(nowOrigin + "Z");
-    const nowDestDate = new Date(nowDest + "Z");
-
-    // 3 hours before departure (using Origin time)
-    const threeHoursBeforeDep = new Date(depDate.getTime() - 3 * 60 * 60 * 1000);
-    // 2 hours after arrival (using Destination time)
-    const twoHoursAfterArr = new Date(arrDate.getTime() + 2 * 60 * 60 * 1000);
-
-    const isAfterStart = nowOriginDate >= threeHoursBeforeDep;
-    const isBeforeEnd = nowDestDate <= twoHoursAfterArr;
-
-    return isAfterStart && isBeforeEnd;
-  };
-
-  const currentLocation = getCurrentLocation();
-  // While loading, we use a neutral dark charcoal to avoid any color flashes (red, etc.)
-  const currentLocationCode = currentPersona === "home" ? "YUL" : currentLocation.code;
+  const currentLocation = useMemo(() => getCurrentLocation(flights, now), [flights, now]);
+  const currentLocationCode = currentPersona === "home" ? PARTNER_CODE : currentLocation.code;
+  // While loading, use a neutral dark charcoal to avoid color flashes.
   const primaryColor = loading ? "#0a0a0a" : getAirportColor(currentLocationCode);
 
-  const upcomingFlights = flights.filter(f => !hasFlightArrived(f));
-  const upcomingJourneys = groupFlightsIntoJourneys(upcomingFlights, true);
+  const upcomingFlights = useMemo(() => flights.filter((f) => !isPast(f, now)), [flights, now]);
+  const upcomingJourneys = useMemo(() => groupFlightsIntoJourneys(upcomingFlights, true), [upcomingFlights]);
 
-  const pastFlights = flights.filter(f => hasFlightArrived(f));
-  const pastJourneys = groupFlightsIntoJourneys(pastFlights, historySortAsc);
+  const pastFlights = useMemo(() => flights.filter((f) => isPast(f, now)), [flights, now]);
+  const pastJourneys = useMemo(() => groupFlightsIntoJourneys(pastFlights, historySortAsc), [pastFlights, historySortAsc]);
 
   useEffect(() => {
     fetchFlights();
@@ -176,28 +56,15 @@ export default function Home() {
       const res = await fetch('/api/flights');
       if (!res.ok) throw new Error('Failed to fetch flights');
       const data = await res.json();
-
-      if (data && data.length > 0) {
-        // Ensure status is typed correctly if needed, though usually string matches
-        setFlights(data as Flight[]);
-      } else {
-        // Fallback to initial flights ONLY if DB is empty and we want to seed? 
-        // Or just leave empty. The user wants persistence, so let's stick to DB.
-        // But for development/demo, maybe we insert initial flights if empty?
-        // Let's refrain from auto-seeding to respect user data privacy/intent unless asked.
-        setFlights([]);
-      }
+      setFlights(Array.isArray(data) ? (data as Flight[]) : []);
     } catch (error) {
       console.error('Error fetching flights:', error);
-      // In case of error (e.g. no connection), maybe show empty or local backup
     } finally {
-      // Data is fetched, but we don't set loading to false yet
-      // We wait for the next render cycle where primaryColor will be calculated
       setLoading(false);
     }
   };
 
-  // Stage 2: Once loading is false and primaryColor is determined, wait a tiny bit then reveal
+  // Once loading is done and primaryColor is determined, reveal after a tiny beat.
   useEffect(() => {
     if (!loading) {
       const timer = setTimeout(() => setIsReady(true), 100);
@@ -213,49 +80,35 @@ export default function Home() {
     setActiveTab([newTab, newDir]);
   };
 
-  const handleAddTrip = async (tripData: any) => {
+  const handleAddTrip = async (tripData: FlightInput) => {
     if (editingFlightId) {
-      // Update existing flight
       try {
         const res = await fetch(`/api/flights/${editingFlightId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tripData),
         });
-
         if (!res.ok) throw new Error('Failed to update flight');
-
-        setFlights((prev) => prev.map(f =>
-          f.id === editingFlightId ? { ...f, ...tripData } : f
-        ));
+        const updated = (await res.json()) as Flight;
+        setFlights((prev) => prev.map((f) => (f.id === editingFlightId ? updated : f)));
         setEditingFlightId(null);
       } catch (error) {
         console.error('Error updating flight:', error);
-        alert('Failed to update flight');
+        toast.error('Failed to update flight');
       }
     } else {
-      // Create new flight
       try {
-        const newFlightData = {
-          ...tripData,
-          // user_id: ... // if auth is implemented
-        };
-
         const res = await fetch('/api/flights', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newFlightData),
+          body: JSON.stringify(tripData),
         });
-
         if (!res.ok) throw new Error('Failed to create flight');
-        const data = await res.json();
-
-        if (data) {
-          setFlights((prev) => [...prev, data as Flight]);
-        }
+        const data = (await res.json()) as Flight;
+        if (data) setFlights((prev) => [...prev, data]);
       } catch (error) {
         console.error('Error adding flight:', error);
-        alert('Failed to add flight');
+        toast.error('Failed to add flight');
       }
     }
     setIsAddModalOpen(false);
@@ -263,16 +116,12 @@ export default function Home() {
 
   const handleDeleteTrip = async (id: string) => {
     try {
-      const res = await fetch(`/api/flights/${id}`, {
-        method: 'DELETE',
-      });
-
+      const res = await fetch(`/api/flights/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete flight');
-
       setFlights((prev) => prev.filter((f) => f.id !== id));
     } catch (error) {
       console.error('Error deleting flight:', error);
-      alert('Failed to delete flight');
+      toast.error('Failed to delete flight');
     }
   };
 
@@ -282,59 +131,34 @@ export default function Home() {
   };
 
   const handleCardToggle = (id: string) => {
-    setActiveOpenCardId(prev => (prev === id ? null : id));
+    setActiveOpenCardId((prev) => (prev === id ? null : id));
   };
 
-  // Staggered container variants for "reshuffling" effect
   const containerVariants = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.08,
-        delayChildren: 0.02,
-      },
-    },
-    exit: {
-      opacity: 0,
-      transition: {
-        duration: 0.2,
-        ease: "easeInOut" as const
-      },
-    },
+    show: { opacity: 1, transition: { staggerChildren: 0.08, delayChildren: 0.02 } },
+    exit: { opacity: 0, transition: { duration: 0.2, ease: "easeInOut" as const } },
   };
 
   const cardVariants = {
-    hidden: {
-      y: 20,
-      opacity: 0,
-      scale: 0.95,
-      filter: "blur(4px)"
-    },
+    hidden: { y: 20, opacity: 0, scale: 0.95, filter: "blur(4px)" },
     show: {
       y: 0,
       opacity: 1,
       scale: 1,
       filter: "blur(0px)",
-      transition: {
-        type: "spring" as const,
-        stiffness: 150,
-        damping: 20,
-        mass: 0.8
-      }
+      transition: { type: "spring" as const, stiffness: 150, damping: 20, mass: 0.8 },
     },
     exit: {
       y: -20,
       opacity: 0,
       scale: 0.95,
       filter: "blur(4px)",
-      transition: { duration: 0.15, ease: "easeIn" as const }
+      transition: { duration: 0.15, ease: "easeIn" as const },
     },
   };
 
-  // Sync background and theme-color with browser UI
   useThemeColor(primaryColor);
-
 
   return (
     <motion.main
@@ -343,10 +167,9 @@ export default function Home() {
       transition={{ duration: 1.5, ease: "easeInOut" }}
       className="h-[100dvh] min-h-[100dvh] w-full font-sans text-white selection:bg-emirates-red/30 relative overflow-hidden flex flex-col"
     >
-      {/* Full Screen Background */}
       <LiquidBackground primaryColor={primaryColor} />
 
-      {/* Top Navigation / Clocks - Only visible on Home/Settings */}
+      {/* Top clocks - Home/Settings only */}
       <AnimatePresence>
         {activeTab !== "history" && activeTab !== "world" && (
           <motion.div
@@ -360,10 +183,10 @@ export default function Home() {
               <GlobalPulse
                 faCity={currentLocation.city}
                 faCode={currentLocation.code}
-                partnerCity="Montreal"
-                partnerCode="YUL"
+                partnerCity={PARTNER_CITY}
+                partnerCode={PARTNER_CODE}
                 persona={currentPersona}
-                onTogglePersona={() => setCurrentPersona(prev => prev === "home" ? "plane" : "home")}
+                onTogglePersona={() => setCurrentPersona((prev) => (prev === "home" ? "plane" : "home"))}
                 isLoading={loading}
               />
             </div>
@@ -371,7 +194,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Sticky Header for Upcoming Journeys */}
+      {/* Sticky header: Upcoming */}
       <AnimatePresence>
         {activeTab === "home" && (
           <motion.div
@@ -388,7 +211,7 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Sticky Header for Past Trips (History) */}
+      {/* Sticky header: History */}
       <AnimatePresence>
         {activeTab === "history" && (
           <motion.div
@@ -424,8 +247,7 @@ export default function Home() {
               exit="exit"
               className="absolute inset-0 w-full h-full flex flex-col"
             >
-               {/* Globe will go here */}
-               <WorldGlobe flights={flights} primaryColor={primaryColor} />
+              <WorldGlobe flights={flights} primaryColor={primaryColor} />
             </motion.div>
           ) : activeTab === "home" ? (
             <motion.div
@@ -451,53 +273,16 @@ export default function Home() {
                 </div>
               ) : (
                 <>
-                  {upcomingJourneys
-                    .map((journey, jIdx) => (
-                      <div key={`upcoming-journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
-                        {journey.map((flight, fIdx) => {
-                          const nextFlight = journey[fIdx + 1];
-                          let isLayover = false;
-                          if (nextFlight) {
-                            const t1 = new Date(flight.departure_time).getTime();
-                            const t2 = new Date(nextFlight.departure_time).getTime();
-                            const firstFlight = t1 < t2 ? flight : nextFlight;
-                            const secondFlight = t1 < t2 ? nextFlight : flight;
-                            isLayover = (new Date(secondFlight.departure_time).getTime() - new Date(firstFlight.arrival_time).getTime()) / 3600000 > 12;
-                          }
-
-                          return (
-                            <React.Fragment key={flight.id}>
-                              <motion.div variants={cardVariants} layout className="w-full relative z-20">
-                                <DigitalBoardingPass
-                                  flight={flight}
-                                  onDelete={handleDeleteTrip}
-                                  onEdit={handleEditTrip}
-                                  isShifted={activeOpenCardId === flight.id}
-                                  onToggleShift={() => handleCardToggle(flight.id)}
-                                  isActive={getFlightStatus(flight)}
-                                />
-                              </motion.div>
-                              
-                              {fIdx < journey.length - 1 && (
-                                <motion.div 
-                                  variants={cardVariants}
-                                  className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
-                                >
-                                  <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
-                                    {isLayover ? (
-                                      <Moon size={12} className="fill-white/20" />
-                                    ) : (
-                                      <Undo2 size={12} strokeWidth={3} />
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    ))}
-
+                  <JourneyList
+                    journeys={upcomingJourneys}
+                    now={now}
+                    activeOpenCardId={activeOpenCardId}
+                    onToggleCard={handleCardToggle}
+                    onDelete={handleDeleteTrip}
+                    onEdit={handleEditTrip}
+                    showLiveStatus
+                    keyPrefix="upcoming"
+                  />
                   {upcomingJourneys.length === 0 && (
                     <div className="mt-12 text-center">
                       <p className="text-white/20 text-xs italic tracking-wide">Your upcoming flights will appear here</p>
@@ -530,52 +315,15 @@ export default function Home() {
                 </div>
               ) : (
                 <>
-                  {pastJourneys
-                    .map((journey, jIdx) => (
-                      <div key={`journey-${jIdx}`} className="w-full max-w-sm flex flex-col gap-0">
-                        {journey.map((flight, fIdx) => {
-                          const nextFlight = journey[fIdx + 1];
-                          let isLayover = false;
-                          if (nextFlight) {
-                            const t1 = new Date(flight.departure_time).getTime();
-                            const t2 = new Date(nextFlight.departure_time).getTime();
-                            const firstFlight = t1 < t2 ? flight : nextFlight;
-                            const secondFlight = t1 < t2 ? nextFlight : flight;
-                            isLayover = (new Date(secondFlight.departure_time).getTime() - new Date(firstFlight.arrival_time).getTime()) / 3600000 > 12;
-                          }
-
-                          return (
-                            <React.Fragment key={flight.id}>
-                              <motion.div variants={cardVariants} layout className="w-full relative z-20">
-                                <DigitalBoardingPass
-                                  flight={flight}
-                                  onDelete={handleDeleteTrip} // Probably want to allow deleting history too?
-                                  onEdit={handleEditTrip}
-                                  isShifted={activeOpenCardId === flight.id}
-                                  onToggleShift={() => handleCardToggle(flight.id)}
-                                />
-                              </motion.div>
-                              
-                              {fIdx < journey.length - 1 && (
-                                <motion.div 
-                                  variants={cardVariants}
-                                  className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
-                                >
-                                  <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
-                                    {isLayover ? (
-                                      <Moon size={12} className="fill-white/20" />
-                                    ) : (
-                                      <Undo2 size={12} strokeWidth={3} />
-                                    )}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    ))}
-
+                  <JourneyList
+                    journeys={pastJourneys}
+                    now={now}
+                    activeOpenCardId={activeOpenCardId}
+                    onToggleCard={handleCardToggle}
+                    onDelete={handleDeleteTrip}
+                    onEdit={handleEditTrip}
+                    keyPrefix="past"
+                  />
                   {pastJourneys.length === 0 && (
                     <div className="mt-20 flex flex-col items-center text-center">
                       <div className="w-24 h-24 rounded-full border border-white/5 flex items-center justify-center mb-6 bg-white/5">
@@ -591,7 +339,7 @@ export default function Home() {
         </AnimatePresence>
       </div>
 
-      {/* Bottom Menu - Fixed */}
+      {/* Bottom menu */}
       <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none pb-[env(safe-area-inset-bottom)]">
         <div className="pointer-events-auto">
           <PillMenu
@@ -603,7 +351,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Add Trip Modal */}
       <AddTripModal
         isOpen={isAddModalOpen}
         onClose={() => {
@@ -612,7 +359,7 @@ export default function Home() {
         }}
         onAdd={handleAddTrip}
         isHistoryMode={activeTab === "history"}
-        flightToEdit={flights.find(f => f.id === editingFlightId) || null}
+        flightToEdit={flights.find((f) => f.id === editingFlightId) || null}
       />
     </motion.main>
   );

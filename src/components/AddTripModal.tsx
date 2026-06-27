@@ -1,15 +1,26 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Calendar, Plane, MapPin, AlertCircle, Clock } from "lucide-react";
+import { X, Calendar, Plane, Clock, Search, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
-import { Flight } from "@/types";
+import { Flight, FlightInput } from "@/types";
+import { normalizeWallClock, toInstant } from "@/lib/time";
+import { daySpan } from "@/lib/aeroMapper";
+import { AIRLINE_CODE } from "@/lib/config";
+
+/** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
+function addDays(date: string, n: number): string {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+}
 
 interface AddTripModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onAdd: (trip: any) => void;
+    onAdd: (trip: FlightInput) => void;
     isHistoryMode?: boolean;
     flightToEdit?: Flight | null;
 }
@@ -31,29 +42,144 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     // Validation Errors
     const [errors, setErrors] = useState<{ origin?: string; destination?: string }>({});
 
-    // Reset or Populate form on open
+    // AeroAPI lookup (autofill)
+    const [aeroConfigured, setAeroConfigured] = useState(false);
+    const [lookingUp, setLookingUp] = useState(false);
+    // Days the arrival falls after departure (preserved when the date is moved).
+    const [arrivalDayOffset, setArrivalDayOffset] = useState<number | null>(null);
+
+    const dialogRef = useRef<HTMLDivElement>(null);
+    const lastFocusedRef = useRef<HTMLElement | null>(null);
+
+    // Probe whether AeroAPI is available so we only show the lookup affordance when usable.
+    useEffect(() => {
+        if (!isOpen) return;
+        let active = true;
+        fetch("/api/aeroapi")
+            .then((r) => r.json())
+            .then((d) => {
+                if (active) setAeroConfigured(Boolean(d?.configured));
+            })
+            .catch(() => {
+                if (active) setAeroConfigured(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, [isOpen]);
+
+    const handleLookup = async () => {
+        const digits = flightNum.replace(/\D/g, "");
+        if (!digits) {
+            toast.error("Enter a flight number first");
+            return;
+        }
+        // Flexible entry order: a date isn't required to look up. Use the chosen
+        // departure date if present, otherwise today, to pick the schedule.
+        const lookupDate = originDate || new Date().toISOString().slice(0, 10);
+        setLookingUp(true);
+        try {
+            const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: lookupDate });
+            const res = await fetch(`/api/aeroapi/lookup?${params.toString()}`);
+            if (!res.ok) throw new Error("Lookup failed");
+            const data = await res.json();
+            if (!data.configured) {
+                toast.error("Flight lookup is not configured");
+                setAeroConfigured(false);
+                return;
+            }
+            if (!data.found || !data.flight) {
+                toast.error("No matching flight found for that number and date");
+                return;
+            }
+            const f = data.flight as FlightInput;
+            const dep = normalizeWallClock(f.departure_time);
+            const arr = normalizeWallClock(f.arrival_time);
+            const span = typeof data.day_span === "number" ? data.day_span : daySpan(dep, arr);
+
+            // Keep the user's chosen departure date (they often book a month out,
+            // beyond AeroAPI's horizon). Fill route + times from the schedule and
+            // derive the arrival date from the overnight day-span.
+            const baseDate = lookupDate;
+            setOrigin(f.origin_code);
+            setOriginDate(baseDate);
+            setOriginTime(dep.slice(11, 16));
+            setDestination(f.destination_code);
+            setDestDate(addDays(baseDate, span));
+            setDestTime(arr.slice(11, 16));
+            setArrivalDayOffset(span);
+            if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
+            setErrors({});
+            toast.success(
+                data.exact
+                    ? `Found ${f.origin_code} -> ${f.destination_code}`
+                    : `Loaded ${f.origin_code} -> ${f.destination_code} schedule - set your travel date`,
+            );
+        } catch {
+            toast.error("Could not look up flight");
+        } finally {
+            setLookingUp(false);
+        }
+    };
+
+    // Focus management: trap focus while open, close on Escape, restore on close.
+    useEffect(() => {
+        if (!isOpen) return;
+        lastFocusedRef.current = document.activeElement as HTMLElement | null;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                e.preventDefault();
+                onClose();
+                return;
+            }
+            if (e.key !== "Tab") return;
+            const root = dialogRef.current;
+            if (!root) return;
+            const focusable = root.querySelectorAll<HTMLElement>(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+            );
+            if (focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        };
+
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("keydown", handleKeyDown);
+            lastFocusedRef.current?.focus?.();
+        };
+    }, [isOpen, onClose]);
+
+    // Reset or Populate form on open. Syncing the form fields to the selected
+    // flight when the dialog opens is a legitimate prop-to-state sync.
     useEffect(() => {
         if (isOpen) {
             if (flightToEdit) {
-                // Populate from existing flight
-                setFlightNum(flightToEdit.flight_number.replace(/^\D+/g, '')); // Remove EK or other non-digits
+                // Populate from existing flight. Times are canonical wall-clock
+                // ("YYYY-MM-DDTHH:mm"), so split the parts directly to avoid any
+                // timezone shifting from Date parsing.
+                setFlightNum((flightToEdit.flight_number ?? "").replace(/^\D+/g, ''));
 
                 setOrigin(flightToEdit.origin_code);
 
-                // Parse dates assuming they are ISO strings
-                // We need to extract the date and time parts
-                // Note: The previous save logic saved them as global ISO strings. 
-                // To fill the input type="date" and "time", we need YYYY-MM-DD and HH:mm
-                const start = new Date(flightToEdit.departure_time);
-                const end = new Date(flightToEdit.arrival_time);
+                const dep = normalizeWallClock(flightToEdit.departure_time);
+                const arr = normalizeWallClock(flightToEdit.arrival_time);
 
-                setOriginDate(start.toISOString().split('T')[0]);
-                // Use UTC to prevent timezone shifting on edit - treat stored time as wall clock
-                setOriginTime(start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }));
+                setOriginDate(dep.slice(0, 10));
+                setOriginTime(dep.slice(11, 16));
 
                 setDestination(flightToEdit.destination_code);
-                setDestDate(end.toISOString().split('T')[0]);
-                setDestTime(end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }));
+                setDestDate(arr.slice(0, 10));
+                setDestTime(arr.slice(11, 16));
+                setArrivalDayOffset(daySpan(dep, arr));
 
                 setErrors({});
             } else {
@@ -66,10 +192,29 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestDate(today);
                 setOriginTime("");
                 setDestTime("");
+                setArrivalDayOffset(null);
                 setErrors({});
             }
         }
     }, [isOpen, flightToEdit]);
+
+    // Moving the departure date carries the arrival date with it, keeping the
+    // same day-span (so overnight flights stay correct) and the arrival time.
+    // Works after a lookup (span known) and for manual entry (derive span from
+    // the currently entered dates).
+    const handleOriginDateChange = (value: string) => {
+        const span =
+            arrivalDayOffset != null
+                ? arrivalDayOffset
+                : originDate && destDate
+                  ? daySpan(originDate, destDate)
+                  : null;
+        setOriginDate(value);
+        if (span != null && value) {
+            setDestDate(addDays(value, span));
+            setArrivalDayOffset(span);
+        }
+    };
 
     const handleTimeChange = (val: string, setter: (v: string) => void) => {
         const digits = val.replace(/\D/g, '').slice(0, 4);
@@ -112,26 +257,25 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         const originData = AIRPORTS[origin.toUpperCase()];
         const destData = AIRPORTS[destination.toUpperCase()];
 
-        // Note: Dates/Times are stored as ISO strings but conceptually represent
-        // the local time at the respective airport, as per requirement.
-        // We will likely need a helper to calculate duration or convert for global comparison later.
+        // Times are stored as local wall-clock at each airport. Classify the
+        // flight as past/upcoming from its actual departure instant (not the tab
+        // it was opened from) so historic flights can be logged from anywhere.
+        const departureWallClock = `${originDate}T${originTime}`;
+        const hasDeparted = toInstant(departureWallClock, origin.toUpperCase()).getTime() < Date.now();
 
         onAdd({
             origin_code: origin.toUpperCase(),
             origin_city: originData.city,
             destination_code: destination.toUpperCase(),
             destination_city: destData.city,
-            flight_number: `EK${flightNum}`,
-            departure_time: `${originDate}T${originTime}`, // Stored as "wall clock" ISO string (no Z)
-            arrival_time: `${destDate}T${destTime}`,     // Stored as "wall clock" ISO string (no Z)
-            status: isHistoryMode ? "completed" : "scheduled",
-            type: isHistoryMode ? "past" : "future",
+            flight_number: `${AIRLINE_CODE}${flightNum}`,
+            departure_time: departureWallClock, // canonical wall-clock (local to origin)
+            arrival_time: `${destDate}T${destTime}`, // canonical wall-clock (local to destination)
+            status: hasDeparted ? "completed" : "scheduled",
+            type: hasDeparted ? "past" : "future",
         });
         onClose();
     };
-
-    // Date Restrictions
-    const today = new Date().toISOString().split('T')[0];
 
     return (
         <AnimatePresence>
@@ -148,6 +292,10 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                     {/* Modal */}
                     <motion.div
+                        ref={dialogRef}
+                        role="dialog"
+                        aria-modal="true"
+                        aria-labelledby="add-trip-title"
                         initial={{ opacity: 0, y: 100, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
@@ -161,7 +309,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         <div className="flex-none z-20 bg-[#0F0F0F] border-b border-white/5 flex items-center justify-between px-5 md:px-8 pt-5 pb-4 md:pt-8 md:pb-6 relative">
                             {/* Gradient mask for smooth content fade under header if we wanted, but solid buffer is safer for 'fixed' feel */}
                             <div className="flex flex-col">
-                                <h2 className="text-xl font-bold text-white tracking-widest uppercase">
+                                <h2 id="add-trip-title" className="text-xl font-bold text-white tracking-widest uppercase">
                                     {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "NEW JOURNEY")}
                                 </h2>
                                 {!flightToEdit && (
@@ -182,7 +330,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                 <div className="flex flex-col items-center justify-center border-b border-white/5 pb-6 md:pb-8">
                                     <label htmlFor="flight-number" className="text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold mb-3">Flight Number</label>
                                     <div className="relative flex items-center justify-center">
-                                        <span className="text-4xl font-bold text-white/40 tracking-tighter mr-2">EK</span>
+                                        <span className="text-4xl font-bold text-white/40 tracking-tighter mr-2">{AIRLINE_CODE}</span>
                                         <input
                                             id="flight-number"
                                             type="text"
@@ -195,6 +343,22 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                             required
                                         />
                                     </div>
+
+                                    {aeroConfigured && (
+                                        <button
+                                            type="button"
+                                            onClick={handleLookup}
+                                            disabled={lookingUp}
+                                            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-white/70 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                        >
+                                            {lookingUp ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <Search size={14} />
+                                            )}
+                                            {lookingUp ? "Looking up..." : "Look up flight"}
+                                        </button>
+                                    )}
                                 </div>
 
                                 {/* 2. Dual Column Layout */}
@@ -236,9 +400,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     id="origin-date"
                                                     type="date"
                                                     value={originDate}
-                                                    min={!isHistoryMode ? today : undefined}
-                                                    max={isHistoryMode ? today : undefined}
-                                                    onChange={(e) => setOriginDate(e.target.value)}
+                                                    onChange={(e) => handleOriginDateChange(e.target.value)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
                                                     required
                                                 />
