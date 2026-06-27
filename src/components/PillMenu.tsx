@@ -4,15 +4,16 @@ import React from "react";
 import { motion } from "framer-motion";
 import { History, Plus, Compass, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 
 interface PillMenuProps {
     activeTab: "home" | "history" | "settings" | "world";
     onTabChange: (tab: "home" | "history" | "settings" | "world") => void;
     onAddClick: () => void;
-    primaryColor: string;
+    chromeColor: string;
 }
 
-export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryColor }: PillMenuProps) {
+export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeColor }: PillMenuProps) {
     const tabs = [
         { id: "world", icon: Globe, label: "World" },
         { id: "home", icon: Compass, label: "Journey" },
@@ -48,8 +49,11 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, primaryCo
                 <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={onAddClick}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110 transition-colors duration-[3000ms]"
-                    style={{ backgroundColor: primaryColor }}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110"
+                    style={{
+                        backgroundColor: chromeColor,
+                        transition: `background-color ${PLACE_TRANSITION_CSS}`,
+                    }}
                 >
                     <Plus size={20} />
                 </motion.button>

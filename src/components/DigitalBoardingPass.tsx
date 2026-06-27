@@ -154,7 +154,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 onClick={activate}
                 onKeyDown={handleKeyDown}
                 className={cn(
-                    "relative w-full h-full glass rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    "relative w-full h-full glass-dark rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                     statusColor,
                     imminent && "animate-pulse-slow",
                     isShifted && "shadow-none"

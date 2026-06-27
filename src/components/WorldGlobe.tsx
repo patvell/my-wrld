@@ -18,7 +18,8 @@ const AUTO_ROTATE_RESUME_MS = 3000;
 
 interface WorldGlobeProps {
   flights: Flight[];
-  primaryColor: string;
+  /** Theme color used to tint transparent ocean pixels */
+  atmosphereColor: string;
 }
 
 interface ArcDatum {
@@ -47,7 +48,7 @@ function getDimensions() {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
+export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dimensions, setDimensions] = useState(getDimensions);
@@ -77,7 +78,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   useEffect(() => {
     let cancelled = false;
 
-    loadGlobeTexture(primaryColor)
+    loadGlobeTexture(atmosphereColor)
       .then((mat) => {
         if (!cancelled) setMaterial(mat);
       })
@@ -88,7 +89,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
     return () => {
       cancelled = true;
     };
-  }, [primaryColor]);
+  }, [atmosphereColor]);
 
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371;

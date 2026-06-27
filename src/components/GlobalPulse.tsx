@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
-import { getAirportColor, getAirportTimezone, AIRPORTS } from "@/data/airports";
-import { getContrastHex } from "@/lib/colors";
+import { getAirportTimezone, AIRPORTS } from "@/data/airports";
+import { getCountryTheme } from "@/lib/countryTheme";
+import { getReadableTextColors } from "@/lib/colors";
+import { PERSONA_SPRING, PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -26,27 +28,15 @@ export default function GlobalPulse({
 }: GlobalPulseProps) {
     const [now, setNow] = useState<Date | null>(null);
 
-    // Determine background color based on current location
     const currentLocationCode = persona === "home" ? partnerCode : faCode;
-    const primaryColor = getAirportColor(currentLocationCode);
+    const countryTheme = getCountryTheme(currentLocationCode);
+    const readable = getReadableTextColors(countryTheme.effectiveBg);
+    const { primary: textColor, secondary: subTextColor, muted: iconColor, onFrosted } = readable;
+    const useFrostedChrome = readable.primary === "#171717";
 
-    // Get Timezones
-    // Partner is always Montreal (YUL) as per request for now, or derived from code
     const partnerTimezone = getAirportTimezone(partnerCode);
     const faTimezone = getAirportTimezone(faCode);
 
-    // Dynamic Text Color based on background luminance
-    // We assume the top part is dominated by primaryColor or a mix. 
-    // Let's use primary color as the main determinant for now, or an average.
-    // For a "mosaic", it's safer to check contrast against the dominant color behind the text.
-    const textColor = getContrastHex(primaryColor);
-    const subTextColor = textColor === "#000000" ? "rgba(0,0,0,0.6)" : "rgba(255,255,255,0.6)";
-    const iconColor = textColor === "#000000" ? "rgba(0,0,0,0.5)" : "rgba(255,255,255,0.5)";
-
-
-    // Live clock. `now` starts null (so SSR and first client paint match), then
-    // ticks every second once mounted. Seeding/ticking happen via a callback,
-    // not a synchronous setState in the effect body.
     useEffect(() => {
         const update = () => setNow(new Date());
         update();
@@ -71,38 +61,32 @@ export default function GlobalPulse({
             day: "numeric",
             month: "short",
             timeZone: timezone,
-        }).format(now).toUpperCase();
+        })
+            .format(now)
+            .toUpperCase();
     };
 
     const getTimeDiffText = (tzBig: string, tzSmall: string) => {
         if (!now) return "";
-        // Use a fixed date to calculate offset to avoid DST edge cases during the transition itself
-        // but for a simple live clock, this approach is usually acceptable
         const dtBig = new Date(now.toLocaleString("en-US", { timeZone: tzBig }));
         const dtSmall = new Date(now.toLocaleString("en-US", { timeZone: tzSmall }));
-        
-        // We round to handle half-hour timezones (like India +5:30)
         const diffMs = dtBig.getTime() - dtSmall.getTime();
         const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 2) / 2;
-        
         if (diffHours === 0) return "SAME TIME";
         const sign = diffHours > 0 ? "+" : "";
         return `${sign}${diffHours}HR`;
     };
 
-    const togglePersona = () => {
-        onTogglePersona();
-    };
+    const colorTransition = { transition: `color ${PLACE_TRANSITION_CSS}` };
 
-    // Determine big and small timezones for the difference calculation
     const bigTz = persona === "plane" ? faTimezone : partnerTimezone;
     const smallTz = persona === "plane" ? partnerTimezone : faTimezone;
 
     return (
-        <div className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 transition-colors duration-1000 overflow-hidden pointer-events-none">
-            {/* Background handled by parent now */}
-
-            {/* Main Display Area */}
+        <div
+            className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
+            style={{ transition: `color ${PLACE_TRANSITION_CSS}` }}
+        >
             <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
                 <AnimatePresence mode="wait">
                     <motion.div
@@ -110,29 +94,29 @@ export default function GlobalPulse({
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                        transition={PERSONA_SPRING}
                         className="flex flex-col items-center"
                     >
-                        {/* Status Label */}
                         <div className="flex items-center gap-2 mb-2">
                             {persona === "plane" ? (
-                                <Plane size={14} style={{ color: iconColor }} />
+                                <Plane size={14} style={{ color: iconColor, ...colorTransition }} />
                             ) : (
-                                <Home size={14} style={{ color: iconColor }} />
+                                <Home size={14} style={{ color: iconColor, ...colorTransition }} />
                             )}
                             <span
                                 className="text-[10px] font-bold tracking-[0.2em] uppercase"
-                                style={{ color: iconColor }}
+                                style={{ color: iconColor, ...colorTransition }}
                             >
                                 {isLoading ? (
                                     <div className="h-[10px] w-24 bg-white/10 rounded animate-shimmer" />
+                                ) : persona === "plane" ? (
+                                    "CURRENTLY EXPLORING"
                                 ) : (
-                                    persona === "plane" ? "CURRENTLY EXPLORING" : "AT HOME"
+                                    "AT HOME"
                                 )}
                             </span>
                         </div>
 
-                        {/* Location */}
                         <div className="flex items-baseline gap-3 mb-1">
                             {isLoading ? (
                                 <>
@@ -143,91 +127,95 @@ export default function GlobalPulse({
                                 <>
                                     <span
                                         className="text-2xl font-bold tracking-tight"
-                                        style={{ color: textColor }}
+                                        style={{ color: textColor, ...colorTransition }}
                                     >
                                         {persona === "plane" ? faCode : partnerCode}
                                     </span>
                                     <span
                                         className="text-lg font-medium tracking-wide"
-                                        style={{ color: subTextColor }}
+                                        style={{ color: subTextColor, ...colorTransition }}
                                     >
                                         {persona === "plane"
-                                            ? (AIRPORTS[faCode]?.countryIso ? `${faCity.toUpperCase()}, ${AIRPORTS[faCode].countryIso}` : faCity.toUpperCase())
-                                            : (AIRPORTS[partnerCode]?.countryIso ? `${partnerCity.toUpperCase()}, ${AIRPORTS[partnerCode].countryIso}` : partnerCity.toUpperCase())
-                                        }
+                                            ? AIRPORTS[faCode]?.countryIso
+                                                ? `${faCity.toUpperCase()}, ${AIRPORTS[faCode].countryIso}`
+                                                : faCity.toUpperCase()
+                                            : AIRPORTS[partnerCode]?.countryIso
+                                              ? `${partnerCity.toUpperCase()}, ${AIRPORTS[partnerCode].countryIso}`
+                                              : partnerCity.toUpperCase()}
                                     </span>
                                 </>
                             )}
                         </div>
 
-
-                        {/* Main Time (Prominent) */}
                         <h1
                             className="text-8xl font-medium tracking-tighter leading-none"
-                            style={{ color: textColor }}
+                            style={{
+                                color: textColor,
+                                ...colorTransition,
+                                textShadow: useFrostedChrome
+                                    ? "0 1px 2px rgba(255,255,255,0.9), 0 0 40px rgba(255,255,255,0.5)"
+                                    : "0 2px 12px rgba(0,0,0,0.25)",
+                            }}
                         >
                             {persona === "plane" ? formatTime(faTimezone) : formatTime(partnerTimezone)}
                         </h1>
 
-                        {/* Date */}
                         <span
                             className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
-                            style={{ color: subTextColor }}
+                            style={{ color: subTextColor, ...colorTransition }}
                         >
                             {now ? (
                                 <>
-                                    {persona === "plane" ? formatDate(faTimezone) : formatDate(partnerTimezone)}
+                                    {persona === "plane"
+                                        ? formatDate(faTimezone)
+                                        : formatDate(partnerTimezone)}
                                     <span className="opacity-50">•</span>
                                     <span>{getTimeDiffText(bigTz, smallTz)}</span>
                                 </>
-                            ) : "..."}
+                            ) : (
+                                "..."
+                            )}
                         </span>
-
                     </motion.div>
                 </AnimatePresence>
             </div>
 
-            {/* Secondary Clock (Toggle Trigger) */}
             <motion.div
-                animate={{
-                    scale: [1, 1.03, 1],
-                }}
-                transition={{
-                    duration: 5,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                }}
+                animate={{ scale: [1, 1.03, 1] }}
+                transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
                 whileTap={{ scale: 0.95 }}
-                onClick={togglePersona}
-                className="cursor-pointer group relative overflow-hidden rounded-full glass border border-white/10 px-6 py-3 flex items-center gap-4 transition-all hover:bg-white/10 pointer-events-auto"
-                style={{ borderColor: subTextColor }}
+                onClick={onTogglePersona}
+                className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10"
+                style={{
+                    borderColor: useFrostedChrome ? "rgba(255,255,255,0.15)" : subTextColor,
+                    transition: `color ${PLACE_TRANSITION_CSS}, border-color ${PLACE_TRANSITION_CSS}`,
+                }}
             >
                 <div className="flex flex-col items-end">
                     <span
                         className="text-xs font-bold"
-                        style={{ color: textColor }}
+                        style={{ color: useFrostedChrome ? onFrosted : textColor, ...colorTransition }}
                     >
                         {persona === "plane" ? formatTime(partnerTimezone) : formatTime(faTimezone)}
                     </span>
                     <span
                         className="text-[9px] font-bold tracking-wider"
-                        style={{ color: subTextColor }}
+                        style={{
+                            color: useFrostedChrome ? "rgba(255,255,255,0.65)" : subTextColor,
+                            ...colorTransition,
+                        }}
                     >
                         {persona === "plane" ? partnerCode : faCode}
                     </span>
                 </div>
 
-                <div className="h-6 w-[1px]" style={{ backgroundColor: subTextColor }} />
+                <div className="h-6 w-[1px] bg-white/20" />
 
                 <div
                     className="flex items-center justify-center transition-colors"
-                    style={{ color: iconColor }}
+                    style={{ color: useFrostedChrome ? onFrosted : iconColor, ...colorTransition }}
                 >
-                    {persona === "plane" ? (
-                        <Home size={18} />
-                    ) : (
-                        <Plane size={18} />
-                    )}
+                    {persona === "plane" ? <Home size={18} /> : <Plane size={18} />}
                 </div>
             </motion.div>
         </div>
