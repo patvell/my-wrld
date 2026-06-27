@@ -1,7 +1,22 @@
+import type { Flight } from "@/types";
+
 export interface GeoPoint {
   lat: number;
   lng: number;
   code: string;
+}
+
+/** Count past arrivals per destination airport (includes home base). */
+export function computeArrivalVisitCounts(
+  flights: Flight[],
+  isPastFn: (f: Flight) => boolean,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  flights.forEach((f) => {
+    if (!isPastFn(f)) return;
+    counts[f.destination_code] = (counts[f.destination_code] || 0) + 1;
+  });
+  return counts;
 }
 
 /** Haversine distance in km between two lat/lng pairs. */

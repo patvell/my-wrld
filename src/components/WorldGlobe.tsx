@@ -10,7 +10,7 @@ import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
-import { findNearbyAirports } from "@/lib/globeUtils";
+import { findNearbyAirports, computeArrivalVisitCounts } from "@/lib/globeUtils";
 import { hexToRgba, isLightBackground } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,9 @@ const DESKTOP_GLOBE_ALTITUDE = 3.2;
 const MOBILE_GLOBE_ALTITUDE = 6.7;
 const MAX_VISIBLE_ROUTES = 20;
 const CLUSTER_THRESHOLD_KM = 350;
+const POINT_ALTITUDE = 0.02;
+const RING_ALTITUDE = 0.021;
+const ARC_ALTITUDE_AUTO_SCALE = 0.28;
 
 interface WorldGlobeProps {
   flights: Flight[];
@@ -78,13 +81,13 @@ function markerStyle(
   let alpha: number;
 
   if (hasPast && hasUpcoming) {
-    size = 0.42;
+    size = 0.462;
     alpha = 0.95;
   } else if (hasPast) {
-    size = 0.5;
+    size = 0.55;
     alpha = 1;
   } else {
-    size = 0.32;
+    size = 0.352;
     alpha = 0.6;
   }
 
@@ -341,24 +344,20 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     };
   }, []);
 
-  const visitCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    flights.forEach((f) => {
-      if (isPast(f) && !isReturnToHome(f)) {
-        counts[f.destination_code] = (counts[f.destination_code] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [flights]);
+  const visitCounts = useMemo(
+    () => computeArrivalVisitCounts(flights, isPast),
+    [flights],
+  );
 
   const arcs = useMemo(() => {
     if (!selectedPoint) return [] as ArcDatum[];
 
     const routes = flights
-      .filter((f) => {
-        if (isReturnToHome(f)) return false;
-        return f.origin_code === selectedPoint.code || f.destination_code === selectedPoint.code;
-      })
+      .filter(
+        (f) =>
+          f.origin_code === selectedPoint.code || f.destination_code === selectedPoint.code,
+      )
+      .sort((a, b) => b.departure_time.localeCompare(a.departure_time))
       .slice(0, MAX_VISIBLE_ROUTES)
       .map((f) => {
         const origin = AIRPORTS[f.origin_code];
@@ -378,6 +377,11 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
 
     return routes;
   }, [flights, selectedPoint, chromeColor]);
+
+  const selectionRing = useMemo(
+    () => (selectedPoint ? [{ lat: selectedPoint.lat, lng: selectedPoint.lng }] : []),
+    [selectedPoint],
+  );
 
   const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
 
@@ -457,15 +461,23 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             arcEndLat={(d: object) => (d as ArcDatum).endLat}
             arcEndLng={(d: object) => (d as ArcDatum).endLng}
             arcColor={(d: object) => (d as ArcDatum).color}
-            arcStroke={(d: object) => ((d as ArcDatum).isPast ? 0.6 : 0.5)}
-            arcAltitude={0.015}
+            arcStroke={(d: object) => ((d as ArcDatum).isPast ? 0.7 : 0.55)}
+            arcAltitudeAutoScale={ARC_ALTITUDE_AUTO_SCALE}
             arcDashLength={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.4)}
             arcDashGap={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.25)}
             arcDashAnimateTime={0}
             pointsData={displayPoints}
             pointColor={(d: object) => (d as PointDatum).color}
             pointRadius={(d: object) => (d as PointDatum).size}
-            pointAltitude={0.015}
+            pointAltitude={POINT_ALTITUDE}
+            ringsData={selectionRing}
+            ringLat={(d: object) => (d as { lat: number }).lat}
+            ringLng={(d: object) => (d as { lng: number }).lng}
+            ringColor={() => hexToRgba(chromeColor, 0.55)}
+            ringMaxRadius={2.5}
+            ringPropagationSpeed={0}
+            ringRepeatPeriod={0}
+            ringAltitude={RING_ALTITUDE}
             htmlElementsData={selectedPoint ? [selectedPoint] : []}
             htmlElement={(d: object) => {
               const point = d as PointDatum;
