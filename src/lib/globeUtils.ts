@@ -19,6 +19,30 @@ export function computeArrivalVisitCounts(
   return counts;
 }
 
+/** Unit vector on the sphere for a lat/lng pair (degrees). */
+function latLngToUnit(lat: number, lng: number) {
+  const phi = ((90 - lat) * Math.PI) / 180;
+  const theta = ((90 - lng) * Math.PI) / 180;
+  const sinPhi = Math.sin(phi);
+  return {
+    x: sinPhi * Math.cos(theta),
+    y: Math.cos(phi),
+    z: sinPhi * Math.sin(theta),
+  };
+}
+
+/** True when a surface point faces the camera hemisphere. */
+export function isOnVisibleHemisphere(
+  pointLat: number,
+  pointLng: number,
+  cameraLat: number,
+  cameraLng: number,
+): boolean {
+  const p = latLngToUnit(pointLat, pointLng);
+  const c = latLngToUnit(cameraLat, cameraLng);
+  return p.x * c.x + p.y * c.y + p.z * c.z > 0;
+}
+
 /** Haversine distance in km between two lat/lng pairs. */
 export function geoDistanceKm(
   lat1: number,

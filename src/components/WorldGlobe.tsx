@@ -10,7 +10,7 @@ import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
-import { findNearbyAirports, computeArrivalVisitCounts } from "@/lib/globeUtils";
+import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
 import { hexToRgba, isLightBackground } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +24,7 @@ const CLUSTER_THRESHOLD_KM = 350;
 const POINT_ALTITUDE = 0.02;
 const RING_ALTITUDE = 0.021;
 const ARC_ALTITUDE_AUTO_SCALE = 0.28;
+const DEFAULT_CAMERA_POV = { lat: 25.2, lng: 55.3 };
 
 interface WorldGlobeProps {
   flights: Flight[];
@@ -118,6 +119,14 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
   const [clusterOptions, setClusterOptions] = useState<PointDatum[] | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
+  const [cameraPov, setCameraPov] = useState(DEFAULT_CAMERA_POV);
+
+  const syncCameraPov = useCallback(() => {
+    const pov = globeRef.current?.pointOfView();
+    if (pov && typeof pov.lat === "number" && typeof pov.lng === "number") {
+      setCameraPov({ lat: pov.lat, lng: pov.lng });
+    }
+  }, []);
 
   useEffect(() => {
     setDimensions(getDimensions(isMobile));
@@ -272,17 +281,22 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
           if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
         });
         controls.addEventListener("end", scheduleAutoRotateResume);
+        controls.addEventListener("change", syncCameraPov);
         controlsConfiguredRef.current = true;
       }
 
       return !controls.enableZoom;
     },
-    [enforceGlobeRestrictions, isFullExperience, prefersReducedMotion, scheduleAutoRotateResume],
+    [enforceGlobeRestrictions, isFullExperience, prefersReducedMotion, scheduleAutoRotateResume, syncCameraPov],
   );
 
   const setInitialPointOfView = useCallback(
     (globe: GlobeMethods) => {
-      globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: getGlobeAltitude(isMobile) }, 0);
+      globe.pointOfView({ lat: DEFAULT_CAMERA_POV.lat, lng: DEFAULT_CAMERA_POV.lng, altitude: getGlobeAltitude(isMobile) }, 0);
+      const pov = globe.pointOfView();
+      if (pov && typeof pov.lat === "number" && typeof pov.lng === "number") {
+        setCameraPov({ lat: pov.lat, lng: pov.lng });
+      }
     },
     [isMobile],
   );
@@ -369,6 +383,12 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     const ringByCode = new Map<string, RingDatum>();
     const routeArcs: ArcDatum[] = [];
 
+    ringByCode.set(hubCode, {
+      lat: selectedPoint.lat,
+      lng: selectedPoint.lng,
+      code: hubCode,
+    });
+
     matchingFlights.forEach((f) => {
       const origin = AIRPORTS[f.origin_code];
       const dest = AIRPORTS[f.destination_code];
@@ -382,7 +402,6 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
         [f.origin_code, origin],
         [f.destination_code, dest],
       ] as const) {
-        if (code === hubCode) continue;
         if (ap.lat === undefined || ap.lng === undefined) continue;
         if (!ringByCode.has(code)) {
           ringByCode.set(code, { lat: ap.lat, lng: ap.lng, code });
@@ -402,6 +421,22 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
 
     return { arcs: routeArcs, routeEndpointRings: Array.from(ringByCode.values()) };
   }, [flights, selectedPoint, chromeColor]);
+
+  const visibleDisplayPoints = useMemo(
+    () =>
+      displayPoints.filter((p) =>
+        isOnVisibleHemisphere(p.lat, p.lng, cameraPov.lat, cameraPov.lng),
+      ),
+    [displayPoints, cameraPov],
+  );
+
+  const visibleRings = useMemo(
+    () =>
+      routeEndpointRings.filter((r) =>
+        isOnVisibleHemisphere(r.lat, r.lng, cameraPov.lat, cameraPov.lng),
+      ),
+    [routeEndpointRings, cameraPov],
+  );
 
   const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
 
@@ -486,11 +521,11 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             arcDashLength={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.4)}
             arcDashGap={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.25)}
             arcDashAnimateTime={0}
-            pointsData={displayPoints}
+            pointsData={visibleDisplayPoints}
             pointColor={(d: object) => (d as PointDatum).color}
             pointRadius={(d: object) => (d as PointDatum).size}
             pointAltitude={POINT_ALTITUDE}
-            ringsData={routeEndpointRings}
+            ringsData={visibleRings}
             ringLat={(d: object) => (d as RingDatum).lat}
             ringLng={(d: object) => (d as RingDatum).lng}
             ringColor={() => hexToRgba(chromeColor, 0.55)}

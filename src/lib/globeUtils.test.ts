@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Flight } from "@/types";
-import { computeArrivalVisitCounts } from "@/lib/globeUtils";
+import { computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
 
 function makeFlight(overrides: Partial<Flight>): Flight {
   return {
@@ -50,5 +50,16 @@ describe("computeArrivalVisitCounts", () => {
     ];
     const counts = computeArrivalVisitCounts(flights, isPast);
     expect(counts.DXB).toBe(1);
+  });
+});
+
+describe("isOnVisibleHemisphere", () => {
+  it("shows points near the camera latitude/longitude", () => {
+    expect(isOnVisibleHemisphere(25, 55, 25, 55)).toBe(true);
+    expect(isOnVisibleHemisphere(30, 60, 25, 55)).toBe(true);
+  });
+
+  it("hides antipodal points", () => {
+    expect(isOnVisibleHemisphere(-25, -125, 25, 55)).toBe(false);
   });
 });

@@ -50,7 +50,7 @@ function processMaskImageData(imageData: ImageData, primaryColor: string, isLigh
       data[i] = Math.round(pr * 255 * (isLight ? 0.55 : 0.45));
       data[i + 1] = Math.round(pg * 255 * (isLight ? 0.55 : 0.45));
       data[i + 2] = Math.round(pb * 255 * (isLight ? 0.65 : 0.55));
-      data[i + 3] = isLight ? 85 : 75;
+      data[i + 3] = 255;
     } else {
       data[i] = land.r;
       data[i + 1] = land.g;
@@ -89,11 +89,12 @@ export function loadGlobeTexture(
           const tex = new THREE.CanvasTexture(canvas);
           const mat = new THREE.MeshPhongMaterial({
             map: tex,
-            transparent: true,
-            opacity: 0.95,
+            transparent: false,
+            opacity: 1,
+            depthWrite: true,
             specular: new THREE.Color(0xffffff),
             shininess: 40,
-            side: THREE.DoubleSide,
+            side: THREE.FrontSide,
           });
           resolve(mat);
         })
