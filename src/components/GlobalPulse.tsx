@@ -26,7 +26,6 @@ export default function GlobalPulse({
     onTogglePersona,
     isLoading = false,
 }: GlobalPulseProps) {
-    const [mounted, setMounted] = useState(false);
     const [now, setNow] = useState<Date | null>(null);
 
     const currentLocationCode = persona === "home" ? partnerCode : faCode;
@@ -39,14 +38,9 @@ export default function GlobalPulse({
     const faTimezone = getAirportTimezone(faCode);
 
     useEffect(() => {
-        setMounted(true);
-        setNow(new Date());
-    }, []);
-
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setNow(new Date());
-        }, 1000);
+        const update = () => setNow(new Date());
+        update();
+        const timer = setInterval(update, 1000);
         return () => clearInterval(timer);
     }, []);
 
@@ -67,7 +61,9 @@ export default function GlobalPulse({
             day: "numeric",
             month: "short",
             timeZone: timezone,
-        }).format(now).toUpperCase();
+        })
+            .format(now)
+            .toUpperCase();
     };
 
     const getTimeDiffText = (tzBig: string, tzSmall: string) => {
@@ -161,18 +157,14 @@ export default function GlobalPulse({
                                     : "0 2px 12px rgba(0,0,0,0.25)",
                             }}
                         >
-                            {mounted
-                                ? persona === "plane"
-                                    ? formatTime(faTimezone)
-                                    : formatTime(partnerTimezone)
-                                : "--:--"}
+                            {persona === "plane" ? formatTime(faTimezone) : formatTime(partnerTimezone)}
                         </h1>
 
                         <span
                             className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
                             style={{ color: subTextColor, ...colorTransition }}
                         >
-                            {mounted ? (
+                            {now ? (
                                 <>
                                     {persona === "plane"
                                         ? formatDate(faTimezone)
@@ -204,11 +196,7 @@ export default function GlobalPulse({
                         className="text-xs font-bold"
                         style={{ color: useFrostedChrome ? onFrosted : textColor, ...colorTransition }}
                     >
-                        {mounted
-                            ? persona === "plane"
-                                ? formatTime(partnerTimezone)
-                                : formatTime(faTimezone)
-                            : "--:--"}
+                        {persona === "plane" ? formatTime(partnerTimezone) : formatTime(faTimezone)}
                     </span>
                     <span
                         className="text-[9px] font-bold tracking-wider"
