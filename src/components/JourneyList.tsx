@@ -3,8 +3,9 @@ import { motion } from "framer-motion";
 import { Undo2, Moon } from "lucide-react";
 import { Flight } from "@/types";
 import DigitalBoardingPass from "@/components/DigitalBoardingPass";
-import { isActive as isFlightActive, isLayoverBetween } from "@/lib/time";
+import { isActive as isFlightActive, isLayoverBetween, isPast, isImminent } from "@/lib/time";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
+import { cn } from "@/lib/utils";
 
 const fullCardVariants = {
   hidden: { y: 20, opacity: 0, scale: 0.95 },
@@ -63,6 +64,10 @@ export default function JourneyList({
   const { isFullExperience } = usePerformanceTier();
   const cardVariants = isFullExperience ? fullCardVariants : mobileCardVariants;
 
+  const connectorChrome = isFullExperience
+    ? "glass-dark border-white/10 bg-black/55"
+    : "bg-neutral-950/90 border-white/10";
+
   return (
     <>
       {journeys.map((journey, jIdx) => (
@@ -76,6 +81,9 @@ export default function JourneyList({
           {journey.map((flight, fIdx) => {
             const nextFlight = journey[fIdx + 1];
             const layover = nextFlight ? isLayoverBetween(flight, nextFlight) : false;
+            const connectorActive = showLiveStatus && isFlightActive(flight, now);
+            const connectorImminent = isImminent(flight);
+            const connectorPast = isPast(flight);
 
             return (
               <React.Fragment key={flight.id}>
@@ -100,13 +108,22 @@ export default function JourneyList({
                     variants={cardVariants}
                     initial="hidden"
                     animate="show"
-                    className="w-full flex justify-center items-center py-1 relative opacity-60 z-10"
+                    className="w-full flex justify-center items-center py-1.5 relative z-10"
                   >
-                    <div className="w-6 h-6 rounded-full glass flex items-center justify-center relative z-10 text-white">
+                    <div
+                      className={cn(
+                        "w-7 h-7 rounded-full flex items-center justify-center border text-white shadow-sm",
+                        connectorChrome,
+                        connectorActive && "border-white/60 bg-white/10 shadow-[0_0_16px_-4px_rgba(255,255,255,0.35)]",
+                        !connectorActive && connectorImminent && "border-white/40 bg-white/5",
+                        !connectorActive && !connectorImminent && connectorPast && "border-white/10",
+                      )}
+                      aria-hidden
+                    >
                       {layover ? (
-                        <Moon size={12} className="fill-white/20" />
+                        <Moon size={13} className="fill-white text-white" strokeWidth={2.5} />
                       ) : (
-                        <Undo2 size={12} strokeWidth={3} />
+                        <Undo2 size={13} strokeWidth={2.5} />
                       )}
                     </div>
                   </motion.div>
