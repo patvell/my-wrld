@@ -42,6 +42,12 @@ interface ArcDatum {
   isPast: boolean;
 }
 
+interface RingDatum {
+  lat: number;
+  lng: number;
+  code: string;
+}
+
 interface PointDatum {
   lat: number;
   lng: number;
@@ -349,39 +355,53 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     [flights],
   );
 
-  const arcs = useMemo(() => {
-    if (!selectedPoint) return [] as ArcDatum[];
+  const { arcs, routeEndpointRings } = useMemo(() => {
+    if (!selectedPoint) return { arcs: [] as ArcDatum[], routeEndpointRings: [] as RingDatum[] };
 
-    const routes = flights
+    const hubCode = selectedPoint.code;
+    const matchingFlights = flights
       .filter(
-        (f) =>
-          f.origin_code === selectedPoint.code || f.destination_code === selectedPoint.code,
+        (f) => f.origin_code === hubCode || f.destination_code === hubCode,
       )
       .sort((a, b) => b.departure_time.localeCompare(a.departure_time))
-      .slice(0, MAX_VISIBLE_ROUTES)
-      .map((f) => {
-        const origin = AIRPORTS[f.origin_code];
-        const dest = AIRPORTS[f.destination_code];
-        if (!origin || !dest) return null;
-        const past = isPast(f);
-        return {
-          startLat: origin.lat,
-          startLng: origin.lng,
-          endLat: dest.lat,
-          endLng: dest.lng,
-          color: past ? hexToRgba(chromeColor, 0.45) : hexToRgba(chromeColor, 0.3),
-          isPast: past,
-        };
-      })
-      .filter(Boolean) as ArcDatum[];
+      .slice(0, MAX_VISIBLE_ROUTES);
 
-    return routes;
+    const ringByCode = new Map<string, RingDatum>();
+    const routeArcs: ArcDatum[] = [];
+
+    matchingFlights.forEach((f) => {
+      const origin = AIRPORTS[f.origin_code];
+      const dest = AIRPORTS[f.destination_code];
+      if (!origin || !dest) return;
+
+      if (origin.lat === undefined || origin.lng === undefined || dest.lat === undefined || dest.lng === undefined) {
+        return;
+      }
+
+      for (const [code, ap] of [
+        [f.origin_code, origin],
+        [f.destination_code, dest],
+      ] as const) {
+        if (code === hubCode) continue;
+        if (ap.lat === undefined || ap.lng === undefined) continue;
+        if (!ringByCode.has(code)) {
+          ringByCode.set(code, { lat: ap.lat, lng: ap.lng, code });
+        }
+      }
+
+      const past = isPast(f);
+      routeArcs.push({
+        startLat: origin.lat,
+        startLng: origin.lng,
+        endLat: dest.lat,
+        endLng: dest.lng,
+        color: past ? hexToRgba(chromeColor, 0.45) : hexToRgba(chromeColor, 0.3),
+        isPast: past,
+      });
+    });
+
+    return { arcs: routeArcs, routeEndpointRings: Array.from(ringByCode.values()) };
   }, [flights, selectedPoint, chromeColor]);
-
-  const selectionRing = useMemo(
-    () => (selectedPoint ? [{ lat: selectedPoint.lat, lng: selectedPoint.lng }] : []),
-    [selectedPoint],
-  );
 
   const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
 
@@ -470,9 +490,9 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             pointColor={(d: object) => (d as PointDatum).color}
             pointRadius={(d: object) => (d as PointDatum).size}
             pointAltitude={POINT_ALTITUDE}
-            ringsData={selectionRing}
-            ringLat={(d: object) => (d as { lat: number }).lat}
-            ringLng={(d: object) => (d as { lng: number }).lng}
+            ringsData={routeEndpointRings}
+            ringLat={(d: object) => (d as RingDatum).lat}
+            ringLng={(d: object) => (d as RingDatum).lng}
             ringColor={() => hexToRgba(chromeColor, 0.55)}
             ringMaxRadius={2.5}
             ringPropagationSpeed={0}
