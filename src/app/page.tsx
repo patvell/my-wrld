@@ -8,6 +8,7 @@ import AddTripModal from "@/components/AddTripModal";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import JourneyList from "@/components/JourneyList";
+import ScrollHeaderScrim from "@/components/ScrollHeaderScrim";
 import { Flight, FlightInput, PersonaMode } from "@/types";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCurrentLocation, isPast } from "@/lib/time";
@@ -206,19 +207,23 @@ export default function Home() {
     [isFullExperience],
   );
 
-  const homeScrollMask = isFullExperience
-    ? {
-        maskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
-        WebkitMaskImage: "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
-      }
-    : undefined;
+  const homeScrollMask = {
+    maskImage:
+      "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
+    WebkitMaskImage:
+      "linear-gradient(to bottom, transparent 380px, black 440px, black 85%, transparent 100%)",
+    maskSize: "100% 100%",
+    WebkitMaskSize: "100% 100%",
+  } as const;
 
-  const historyScrollMask = isFullExperience
-    ? {
-        maskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
-        WebkitMaskImage: "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
-      }
-    : undefined;
+  const historyScrollMask = {
+    maskImage:
+      "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
+    WebkitMaskImage:
+      "linear-gradient(to bottom, transparent 40px, black 120px, black 85%, transparent 100%)",
+    maskSize: "100% 100%",
+    WebkitMaskSize: "100% 100%",
+  } as const;
 
   useThemeColor(countryTheme.themeColor);
 
@@ -261,7 +266,9 @@ export default function Home() {
 
       <AnimatePresence>
         {activeTab === "home" && (
-          <motion.div
+          <>
+            <ScrollHeaderScrim className="top-[320px] h-[100px]" />
+            <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -272,12 +279,15 @@ export default function Home() {
               <div className={cn("h-[1px] flex-1 ml-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
             </div>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {activeTab === "history" && (
-          <motion.div
+          <>
+            <ScrollHeaderScrim className="top-0 h-[80px]" />
+            <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
@@ -295,6 +305,7 @@ export default function Home() {
               </button>
             </div>
           </motion.div>
+          </>
         )}
       </AnimatePresence>
 
