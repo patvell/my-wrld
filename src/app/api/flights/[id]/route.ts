@@ -15,6 +15,7 @@ const ALLOWED_COLUMNS = new Set([
   'status',
   'type',
   'confirmed_at',
+  'fa_flight_id',
 ]);
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -37,17 +38,25 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 });
     }
 
+    const existing = await db.execute({
+      sql: `SELECT id FROM flights WHERE id = ? AND (user_id = ? OR user_id IS NULL OR user_id = '')`,
+      args: [id, userId],
+    });
+    if (existing.rows.length === 0) {
+      return NextResponse.json({ error: 'Flight not found' }, { status: 404 });
+    }
+
     const setClause = entries.map(([k]) => `${k} = ?`).join(', ');
-    const values = [...entries.map(([, v]) => v ?? null), id, userId];
+    const values = [...entries.map(([, v]) => v ?? null), id];
 
     await db.execute({
-      sql: `UPDATE flights SET ${setClause} WHERE id = ? AND user_id = ?`,
+      sql: `UPDATE flights SET ${setClause} WHERE id = ?`,
       args: values,
     });
 
     const updatedFlight = await db.execute({
-      sql: 'SELECT * FROM flights WHERE id = ? AND user_id = ?',
-      args: [id, userId],
+      sql: 'SELECT * FROM flights WHERE id = ?',
+      args: [id],
     });
     if (updatedFlight.rows.length === 0) {
       return NextResponse.json({ error: 'Flight not found' }, { status: 404 });
@@ -66,14 +75,18 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const userId = getUserId(request);
     const { id } = await params;
 
-    const result = await db.execute({
-      sql: 'DELETE FROM flights WHERE id = ? AND user_id = ?',
+    const existing = await db.execute({
+      sql: `SELECT id FROM flights WHERE id = ? AND (user_id = ? OR user_id IS NULL OR user_id = '')`,
       args: [id, userId],
     });
-
-    if (result.rowsAffected === 0) {
+    if (existing.rows.length === 0) {
       return NextResponse.json({ error: 'Flight not found' }, { status: 404 });
     }
+
+    await db.execute({
+      sql: 'DELETE FROM flights WHERE id = ?',
+      args: [id],
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {

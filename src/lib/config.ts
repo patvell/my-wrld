@@ -25,11 +25,24 @@ export const PARTNER_CITY = "Montreal";
  */
 export const DEFAULT_USER_ID = "00000000-0000-0000-0000-000000000000";
 
+/** Left-pad numeric flight digits to 3 characters (e.g. "9" → "009"). */
+export function formatFlightDigits(digits: string): string {
+  return digits.replace(/\D/g, "").padStart(3, "0");
+}
+
+/** Padded flight digits for display, or "---" when missing. */
+export function formatFlightDisplay(flightNumber: string | null): string {
+  if (!flightNumber) return "---";
+  const digits = flightNumber.replace(/\D/g, "");
+  if (!digits) return "---";
+  return formatFlightDigits(digits);
+}
+
 /**
  * Build an AeroAPI ident (ICAO designator) from a stored flight number.
  * e.g. "EK123" or "123" -> "UAE123". A multi-airline IATA->ICAO map is future work.
  */
 export function toAeroIdent(flightNumber: string): string {
-  const digits = flightNumber.replace(/\D/g, "");
+  const digits = formatFlightDigits(flightNumber.replace(/\D/g, ""));
   return `${FLIGHTAWARE_CARRIER}${digits}`;
 }

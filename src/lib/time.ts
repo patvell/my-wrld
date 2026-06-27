@@ -29,10 +29,22 @@ export function normalizeWallClock(value: string): string {
   if (!value) return value;
   // Drop a trailing Z or +hh:mm / -hh:mm offset, and anything after minutes.
   const stripped = value.replace(/(Z|[+-]\d{2}:?\d{2})$/, "");
-  const match = stripped.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  const match = stripped.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{1,2})/);
   if (!match) return stripped;
   const [, y, mo, d, h, mi] = match;
-  return `${y}-${mo}-${d}T${h}:${mi}`;
+  return `${y}-${mo}-${d}T${h.padStart(2, "0")}:${mi.padStart(2, "0")}`;
+}
+
+/** Pad a user-entered HH:mm (or H:mm) to two-digit hours and minutes. */
+export function padTimeInput(time: string): string {
+  const [h = "", m = ""] = time.split(":");
+  if (!h || !m) return time;
+  return `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
+}
+
+/** Build canonical wall-clock "YYYY-MM-DDTHH:mm" from date + local time inputs. */
+export function buildWallClock(date: string, time: string): string {
+  return `${date}T${padTimeInput(time)}`;
 }
 
 /** Convert a local wall-clock at the given airport into an absolute UTC instant. */

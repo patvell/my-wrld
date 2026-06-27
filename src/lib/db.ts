@@ -61,9 +61,15 @@ async function migrate(db: Client): Promise<void> {
   }
 
   await db.execute({
-    sql: 'UPDATE flights SET user_id = ? WHERE user_id IS NULL',
+    sql: `UPDATE flights SET user_id = ? WHERE user_id IS NULL OR user_id = ''`,
     args: [DEFAULT_USER_ID],
   });
+
+  try {
+    await db.execute('ALTER TABLE flights ADD COLUMN fa_flight_id TEXT');
+  } catch {
+    // Column already exists
+  }
 
   const legacy = await db.execute(
     'SELECT id, departure_time, arrival_time FROM flights WHERE length(departure_time) > 16 OR length(arrival_time) > 16',

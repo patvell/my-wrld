@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { Flight } from "@/types";
 import {
   normalizeWallClock,
+  padTimeInput,
+  buildWallClock,
   toInstant,
   instantToWallClock,
   isPast,
@@ -38,6 +40,24 @@ describe("normalizeWallClock", () => {
 
   it("handles a space separator", () => {
     expect(normalizeWallClock("2026-01-30 03:40:00")).toBe("2026-01-30T03:40");
+  });
+
+  it("pads single-digit hours and minutes", () => {
+    expect(normalizeWallClock("2026-05-09T9:30")).toBe("2026-05-09T09:30");
+  });
+});
+
+describe("padTimeInput", () => {
+  it("left-pads hours and minutes to two digits", () => {
+    expect(padTimeInput("9:30")).toBe("09:30");
+    expect(padTimeInput("14:5")).toBe("14:05");
+    expect(padTimeInput("09:30")).toBe("09:30");
+  });
+});
+
+describe("buildWallClock", () => {
+  it("combines date and padded time", () => {
+    expect(buildWallClock("2026-05-09", "9:30")).toBe("2026-05-09T09:30");
   });
 });
 

@@ -37,8 +37,8 @@ export async function POST(request: Request) {
     await db.execute({
       sql: `INSERT INTO flights (
         id, origin_code, origin_city, destination_code, destination_city,
-        departure_time, arrival_time, flight_number, status, type, confirmed_at, user_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        departure_time, arrival_time, flight_number, status, type, confirmed_at, user_id, fa_flight_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
         data.origin_code,
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
         data.type ?? null,
         data.confirmed_at ?? null,
         userId,
+        data.fa_flight_id ?? null,
       ],
     });
 

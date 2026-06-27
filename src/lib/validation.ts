@@ -22,6 +22,7 @@ export const createFlightSchema = z.object({
   status: z.enum(["scheduled", "completed", "cancelled"]).optional(),
   type: z.enum(["past", "future"]).optional(),
   confirmed_at: z.string().nullable().optional(),
+  fa_flight_id: z.string().nullable().optional(),
 });
 
 /** Schema for updating a flight (any subset of mutable fields). */

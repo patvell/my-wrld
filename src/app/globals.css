@@ -45,6 +45,10 @@ body {
     @apply bg-black/30 backdrop-blur-[25px] border border-white/10;
   }
 
+  .glass-solid {
+    @apply bg-black/45 backdrop-blur-[25px] border border-white/10;
+  }
+
   .text-shadow-gold {
     text-shadow: 0 0 10px rgba(212, 175, 55, 0.5);
   }

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getFlightsByIdent, isAeroApiConfigured, AeroApiError } from "@/lib/aeroapi";
-import { mapAeroFlightToInput, pickFlightForDate, daySpan } from "@/lib/aeroMapper";
+import { isAeroApiConfigured, AeroApiError } from "@/lib/aeroapi";
 import { getCached, setCached, LOOKUP_TTL_MS } from "@/lib/aeroCache";
 import { toAeroIdent } from "@/lib/config";
+import { resolveFlightLookup, type LookupSource } from "@/lib/aeroResolver";
 import { FlightInput } from "@/types";
 
 const querySchema = z.object({
@@ -18,6 +18,10 @@ interface LookupResult {
   exact?: boolean;
   /** Calendar days arrival falls after departure (0 same day, 1 overnight). */
   day_span?: number;
+  /** AeroAPI data source used for this lookup. */
+  source?: LookupSource;
+  /** FlightAware flight id when available (operational/history). */
+  fa_flight_id?: string | null;
   /**
    * The flight schedule (route + times). Its dates reflect the matched AeroAPI
    * instance, which may differ from the requested date; the client applies the
@@ -45,26 +49,24 @@ export async function GET(request: Request) {
 
   const aeroIdent = toAeroIdent(parsed.data.ident);
   const date = parsed.data.date;
-  const cacheKey = `lookup:${aeroIdent}:${date}`;
+  const preferHistory = url.searchParams.get("prefer_history") === "1";
+  const cacheKey = `lookup:${aeroIdent}:${date}:${preferHistory ? "h" : "n"}`;
 
   try {
     const cached = await getCached<LookupResult>(cacheKey, LOOKUP_TTL_MS);
     if (cached) return NextResponse.json(cached);
 
-    const flights = await getFlightsByIdent(aeroIdent);
-    const match = pickFlightForDate(flights, date);
-    const mapped = match ? mapAeroFlightToInput(match) : null;
+    const resolved = await resolveFlightLookup(aeroIdent, date, { preferHistory });
 
-    // Return any usable schedule (route + times), even if the matched instance
-    // isn't on the requested date. This lets users look up flights booked far in
-    // advance (beyond AeroAPI's ~2-week horizon) and apply their own date.
-    const result: LookupResult = mapped
+    const result: LookupResult = resolved.flight
       ? {
           configured: true,
           found: true,
-          exact: mapped.departure_time.slice(0, 10) === date,
-          day_span: daySpan(mapped.departure_time, mapped.arrival_time),
-          flight: mapped,
+          exact: resolved.exact,
+          day_span: resolved.day_span,
+          source: resolved.source,
+          fa_flight_id: resolved.fa_flight_id,
+          flight: resolved.flight,
         }
       : { configured: true, found: false };
 

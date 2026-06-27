@@ -18,6 +18,7 @@ export interface Flight {
   type: FlightType;
   confirmed_at?: string | null;
   user_id?: string | null;
+  fa_flight_id?: string | null;
 }
 
 /** Payload accepted when creating or updating a flight. */
@@ -33,6 +34,7 @@ export interface FlightInput {
   type?: FlightType;
   confirmed_at?: string | null;
   user_id?: string | null;
+  fa_flight_id?: string | null;
 }
 
 export interface AppState {

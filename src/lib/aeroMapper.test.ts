@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
-import type { AeroFlight } from "@/lib/aeroapi";
-import { mapAeroFlightToInput, pickFlightForDate, mapAeroFlightToStatus, daySpan } from "@/lib/aeroMapper";
+import type { AeroFlight, AeroSchedule } from "@/lib/aeroapi";
+import {
+  mapAeroFlightToInput,
+  mapAeroScheduleToInput,
+  pickFlightForDate,
+  pickScheduleForDate,
+  mapAeroFlightToStatus,
+  daySpan,
+} from "@/lib/aeroMapper";
 
 function aeroFlight(overrides: Partial<AeroFlight> = {}): AeroFlight {
   return {
@@ -17,6 +24,20 @@ function aeroFlight(overrides: Partial<AeroFlight> = {}): AeroFlight {
   };
 }
 
+function aeroSchedule(overrides: Partial<AeroSchedule> = {}): AeroSchedule {
+  return {
+    ident: "UAE5",
+    ident_iata: "EK5",
+    origin_iata: "DXB",
+    destination_iata: "LHR",
+    origin_timezone: "Asia/Dubai",
+    destination_timezone: "Europe/London",
+    scheduled_out: "2026-07-01T10:45:00Z",
+    scheduled_in: "2026-07-01T19:45:00Z",
+    ...overrides,
+  };
+}
+
 describe("mapAeroFlightToInput", () => {
   it("maps codes/cities and converts UTC times to each airport's local wall-clock", () => {
     const out = mapAeroFlightToInput(aeroFlight());
@@ -27,7 +48,7 @@ describe("mapAeroFlightToInput", () => {
       destination_city: "London",
       departure_time: "2026-04-20T14:45",
       arrival_time: "2026-04-20T20:45",
-      flight_number: "EK5",
+      flight_number: "EK005",
     });
   });
 
@@ -81,5 +102,32 @@ describe("mapAeroFlightToStatus", () => {
     expect(s.arrival_delay_min).toBe(15);
     expect(s.gate_destination).toBe("A12");
     expect(s.fa_flight_id).toBe("UAE5-1700000000-airline-0");
+  });
+});
+
+describe("mapAeroScheduleToInput", () => {
+  it("maps schedule to FlightInput using AIRPORTS for cities", () => {
+    const out = mapAeroScheduleToInput(aeroSchedule());
+    expect(out).toEqual({
+      origin_code: "DXB",
+      origin_city: "Dubai",
+      destination_code: "LHR",
+      destination_city: "London Heathrow",
+      departure_time: "2026-07-01T14:45",
+      arrival_time: "2026-07-01T20:45",
+      flight_number: "EK005",
+    });
+  });
+});
+
+describe("pickScheduleForDate", () => {
+  it("returns the schedule whose local departure date matches", () => {
+    const a = aeroSchedule({ ident: "UAE5", scheduled_out: "2026-06-30T10:45:00Z" });
+    const b = aeroSchedule({ ident: "UAE5b", scheduled_out: "2026-07-01T10:45:00Z" });
+    expect(pickScheduleForDate([a, b], "2026-07-01")?.ident).toBe("UAE5b");
+  });
+
+  it("returns null for an empty list", () => {
+    expect(pickScheduleForDate([], "2026-07-01")).toBeNull();
   });
 });

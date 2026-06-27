@@ -4,7 +4,7 @@ import { Flight } from "@/types";
 import { Plane, Trash2, Edit, X, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
-import { AIRLINE_CODE, FLIGHTAWARE_CARRIER } from "@/lib/config";
+import { AIRLINE_CODE, FLIGHTAWARE_CARRIER, formatFlightDisplay } from "@/lib/config";
 import type { LiveStatus } from "@/lib/aeroMapper";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
@@ -21,7 +21,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     const { isFullExperience } = usePerformanceTier();
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [live, setLive] = useState<LiveStatus | null>(null);
-    const flightNumber = flight.flight_number ? flight.flight_number.replace(/^\D+/g, '') : "---";
+    const flightNumber = formatFlightDisplay(flight.flight_number);
 
     const imminent = isImminent(flight);
     const past = isPast(flight);
@@ -43,15 +43,19 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
             }
         };
         load();
-        const timer = setInterval(load, 5 * 60 * 1000);
+        const timer = setInterval(load, 90 * 1000);
         return () => {
             active = false;
             clearInterval(timer);
         };
     }, [isActive, flight.id]);
 
+    const cancelled = Boolean(live?.cancelled);
+
     // Live active state gets a brighter, glowing treatment.
-    const statusColor = isActive
+    const statusColor = cancelled
+        ? "shadow-[0_0_30px_-5px_rgba(239,68,68,0.5)] border-red-500/60 bg-red-950/30"
+        : isActive
         ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.4)] border-white/60 bg-white/10"
         : (imminent ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.2)] border-white/40 bg-white/5" : "border-white/5");
 
@@ -75,7 +79,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     };
 
     const activate = () => {
-        if (isActive) {
+        if (isActive && flightNumber !== "---") {
             window.open(`https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`, '_blank');
             return;
         }
@@ -105,7 +109,8 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     animate={{
                         scale: isShifted ? 1 : 0.8,
                         opacity: isShifted ? 1 : 0,
-                        x: isShifted ? 0 : 20
+                        x: isShifted ? 0 : 20,
+                        backgroundColor: "rgba(0, 0, 0, 0.4)",
                     }}
                     transition={{
                         delay: isShifted ? 0.6 : 0,
@@ -175,6 +180,19 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.departure_time)}</span>
                             <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.departure_time)}</span>
+                            {isActive && live && (live.gate_origin || live.terminal_origin || live.departure_delay_min) && (
+                                <span className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/60 block">
+                                    {live.terminal_origin ? `T${live.terminal_origin}` : null}
+                                    {live.terminal_origin && live.gate_origin ? " " : null}
+                                    {live.gate_origin ? `Gate ${live.gate_origin}` : null}
+                                    {(live.terminal_origin || live.gate_origin) && live.departure_delay_min ? " | " : null}
+                                    {live.departure_delay_min && live.departure_delay_min > 0
+                                        ? `Delayed ${live.departure_delay_min}m`
+                                        : live.departure_delay_min && live.departure_delay_min < 0
+                                            ? `Early ${Math.abs(live.departure_delay_min)}m`
+                                            : null}
+                                </span>
+                            )}
                         </div>
                     </div>
 
@@ -190,8 +208,11 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                         className="flex items-center gap-1.5 mb-1"
                                     >
                                         <div className="w-1.5 h-1.5 rounded-full bg-white shadow-[0_0_8px_rgba(255,255,255,0.8)] animate-pulse" />
-                                        <span className="text-[10px] font-black tracking-[0.2em] text-white uppercase drop-shadow-sm">
-                                            {live?.status ? live.status : "Live"}
+                                        <span className={cn(
+                                            "text-[10px] font-black tracking-[0.2em] uppercase drop-shadow-sm",
+                                            cancelled ? "text-red-400" : "text-white",
+                                        )}>
+                                            {cancelled ? "Cancelled" : live?.status ? live.status : "Live"}
                                         </span>
                                     </motion.div>
                                 )}

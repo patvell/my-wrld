@@ -1,8 +1,8 @@
-import type { AeroFlight } from "@/lib/aeroapi";
+import type { AeroFlight, AeroSchedule } from "@/lib/aeroapi";
 import { FlightInput } from "@/types";
-import { getAirportTimezone } from "@/data/airports";
+import { AIRPORTS, getAirportTimezone } from "@/data/airports";
 import { instantToWallClockTz } from "@/lib/time";
-import { AIRLINE_CODE } from "@/lib/config";
+import { AIRLINE_CODE, formatFlightDigits } from "@/lib/config";
 
 /**
  * Pure mapping helpers from AeroAPI flight objects to the app's model.
@@ -18,9 +18,9 @@ function bestArrival(f: AeroFlight): string | null {
 }
 
 function flightNumberFrom(f: AeroFlight): string {
-  if (f.ident_iata) return f.ident_iata;
-  const digits = (f.ident ?? "").replace(/\D/g, "");
-  return `${AIRLINE_CODE}${digits}`;
+  const raw = f.ident_iata ?? `${AIRLINE_CODE}${(f.ident ?? "").replace(/\D/g, "")}`;
+  const digits = raw.replace(/\D/g, "");
+  return `${AIRLINE_CODE}${formatFlightDigits(digits)}`;
 }
 
 /**
@@ -65,6 +65,50 @@ export function pickFlightForDate(flights: AeroFlight[], date: string): AeroFlig
  * wall-clock times). Returns null if essential fields (IATA codes, times) are
  * missing. Leaves status/type to the caller.
  */
+/**
+ * Choose the published schedule whose local departure date matches the
+ * requested date (YYYY-MM-DD). Falls back to the closest by departure instant.
+ */
+export function pickScheduleForDate(schedules: AeroSchedule[], date: string): AeroSchedule | null {
+  if (schedules.length === 0) return null;
+
+  const exact = schedules.find((s) => {
+    const tz = s.origin_timezone ?? getAirportTimezone(s.origin_iata);
+    return instantToWallClockTz(s.scheduled_out, tz).slice(0, 10) === date;
+  });
+  if (exact) return exact;
+
+  const target = Date.parse(`${date}T12:00:00Z`);
+  return schedules.reduce((closest, s) => {
+    const tz = s.origin_timezone ?? getAirportTimezone(s.origin_iata);
+    const dep = Date.parse(instantToWallClockTz(s.scheduled_out, tz));
+    const best = Date.parse(instantToWallClockTz(closest.scheduled_out, closest.origin_timezone ?? getAirportTimezone(closest.origin_iata)));
+    return Math.abs(dep - target) < Math.abs(best - target) ? s : closest;
+  });
+}
+
+function scheduleFlightNumber(s: AeroSchedule): string {
+  const raw = s.ident_iata ?? `${AIRLINE_CODE}${(s.ident ?? "").replace(/\D/g, "")}`;
+  const digits = raw.replace(/\D/g, "");
+  return `${AIRLINE_CODE}${formatFlightDigits(digits)}`;
+}
+
+/** Map a published schedule row to FlightInput using AIRPORTS for city names. */
+export function mapAeroScheduleToInput(s: AeroSchedule): FlightInput | null {
+  const originTz = s.origin_timezone ?? getAirportTimezone(s.origin_iata);
+  const destTz = s.destination_timezone ?? getAirportTimezone(s.destination_iata);
+
+  return {
+    origin_code: s.origin_iata,
+    origin_city: AIRPORTS[s.origin_iata]?.city ?? s.origin_iata,
+    destination_code: s.destination_iata,
+    destination_city: AIRPORTS[s.destination_iata]?.city ?? s.destination_iata,
+    departure_time: instantToWallClockTz(s.scheduled_out, originTz),
+    arrival_time: instantToWallClockTz(s.scheduled_in, destTz),
+    flight_number: scheduleFlightNumber(s),
+  };
+}
+
 export function mapAeroFlightToInput(f: AeroFlight): FlightInput | null {
   const originCode = f.origin?.code_iata;
   const destCode = f.destination?.code_iata;

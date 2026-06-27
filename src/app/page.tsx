@@ -92,44 +92,64 @@ export default function Home() {
     setActiveTab([newTab, newDir]);
   };
 
-  const handleAddTrip = async (tripData: FlightInput) => {
-    if (editingFlightId) {
+  const handleAddTrip = async (tripData: FlightInput): Promise<boolean> => {
+    const flightId = editingFlightId;
+    if (flightId) {
       try {
-        const res = await fetch(`/api/flights/${editingFlightId}`, {
+        const res = await fetch(`/api/flights/${flightId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tripData),
         });
-        if (!res.ok) throw new Error('Failed to update flight');
+        if (!res.ok) {
+          const body = await res.text().catch(() => '');
+          console.error('Failed to update flight:', res.status, body);
+          toast.error('Failed to update flight');
+          return false;
+        }
         const updated = (await res.json()) as Flight;
-        setFlights((prev) => prev.map((f) => (f.id === editingFlightId ? updated : f)));
+        setFlights((prev) => prev.map((f) => (f.id === flightId ? updated : f)));
         setEditingFlightId(null);
+        setIsAddModalOpen(false);
+        return true;
       } catch (error) {
         console.error('Error updating flight:', error);
-        toast.error('Failed to update flight');
-      }
-    } else {
-      try {
-        const res = await fetch('/api/flights', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(tripData),
-        });
-        if (!res.ok) throw new Error('Failed to create flight');
-        const data = (await res.json()) as Flight;
-        if (data) setFlights((prev) => [...prev, data]);
-      } catch (error) {
-        console.error('Error adding flight:', error);
-        toast.error('Failed to add flight');
+        toast.error('Failed to update flight — check your connection and try again');
+        return false;
       }
     }
-    setIsAddModalOpen(false);
+
+    try {
+      const res = await fetch('/api/flights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(tripData),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error('Failed to create flight:', res.status, body);
+        toast.error('Failed to add flight');
+        return false;
+      }
+      const data = (await res.json()) as Flight;
+      if (data) setFlights((prev) => [...prev, data]);
+      setIsAddModalOpen(false);
+      return true;
+    } catch (error) {
+      console.error('Error adding flight:', error);
+      toast.error('Failed to add flight — check your connection and try again');
+      return false;
+    }
   };
 
   const handleDeleteTrip = async (id: string) => {
     try {
       const res = await fetch(`/api/flights/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete flight');
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        console.error('Failed to delete flight:', res.status, body);
+        throw new Error('Failed to delete flight');
+      }
       setFlights((prev) => prev.filter((f) => f.id !== id));
     } catch (error) {
       console.error('Error deleting flight:', error);

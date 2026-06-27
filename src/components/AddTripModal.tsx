@@ -6,9 +6,9 @@ import { X, Calendar, Plane, Clock, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
 import { Flight, FlightInput } from "@/types";
-import { normalizeWallClock, toInstant } from "@/lib/time";
+import { buildWallClock, normalizeWallClock, padTimeInput, toInstant } from "@/lib/time";
 import { daySpan } from "@/lib/aeroMapper";
-import { AIRLINE_CODE } from "@/lib/config";
+import { AIRLINE_CODE, formatFlightDigits } from "@/lib/config";
 
 /** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
 function addDays(date: string, n: number): string {
@@ -20,7 +20,7 @@ function addDays(date: string, n: number): string {
 interface AddTripModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onAdd: (trip: FlightInput) => void;
+    onAdd: (trip: FlightInput) => Promise<boolean>;
     isHistoryMode?: boolean;
     flightToEdit?: Flight | null;
 }
@@ -47,6 +47,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     const [lookingUp, setLookingUp] = useState(false);
     // Days the arrival falls after departure (preserved when the date is moved).
     const [arrivalDayOffset, setArrivalDayOffset] = useState<number | null>(null);
+    const [pendingFaFlightId, setPendingFaFlightId] = useState<string | null>(null);
 
     const dialogRef = useRef<HTMLDivElement>(null);
     const lastFocusedRef = useRef<HTMLElement | null>(null);
@@ -80,6 +81,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         setLookingUp(true);
         try {
             const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: lookupDate });
+            if (isHistoryMode) params.set("prefer_history", "1");
             const res = await fetch(`/api/aeroapi/lookup?${params.toString()}`);
             if (!res.ok) throw new Error("Lookup failed");
             const data = await res.json();
@@ -108,13 +110,24 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             setDestDate(addDays(baseDate, span));
             setDestTime(arr.slice(11, 16));
             setArrivalDayOffset(span);
+            setPendingFaFlightId(data.fa_flight_id ?? null);
             if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
             setErrors({});
-            toast.success(
-                data.exact
-                    ? `Found ${f.origin_code} -> ${f.destination_code}`
-                    : `Loaded ${f.origin_code} -> ${f.destination_code} schedule - set your travel date`,
-            );
+
+            const route = `${f.origin_code} → ${f.destination_code}`;
+            if (data.source === "schedule") {
+                toast.success(
+                    data.exact
+                        ? `Found published schedule for ${route}`
+                        : `Loaded published schedule for ${route} — set your travel date`,
+                );
+            } else if (data.source === "history") {
+                toast.success(`Found historical flight ${route}`);
+            } else if (data.exact) {
+                toast.success(`Found ${route}`);
+            } else {
+                toast.success(`Loaded ${route} schedule — set your travel date`);
+            }
         } catch {
             toast.error("Could not look up flight");
         } finally {
@@ -180,6 +193,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestDate(arr.slice(0, 10));
                 setDestTime(arr.slice(11, 16));
                 setArrivalDayOffset(daySpan(dep, arr));
+                setPendingFaFlightId(flightToEdit.fa_flight_id ?? null);
 
                 setErrors({});
             } else {
@@ -193,6 +207,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setOriginTime("");
                 setDestTime("");
                 setArrivalDayOffset(null);
+                setPendingFaFlightId(null);
                 setErrors({});
             }
         }
@@ -229,7 +244,9 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         return AIRPORTS[code.toUpperCase()] !== undefined;
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const [submitting, setSubmitting] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         const newErrors: { origin?: string; destination?: string } = {};
@@ -241,11 +258,13 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             newErrors.destination = "Invalid";
         }
 
-        const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
-        if (!timeRegex.test(originTime)) {
+        const paddedOriginTime = padTimeInput(originTime);
+        const paddedDestTime = padTimeInput(destTime);
+        const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+        if (!timeRegex.test(paddedOriginTime)) {
             newErrors.origin = "Check Time";
         }
-        if (!timeRegex.test(destTime)) {
+        if (!timeRegex.test(paddedDestTime)) {
             newErrors.destination = "Check Time";
         }
 
@@ -260,21 +279,32 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         // Times are stored as local wall-clock at each airport. Classify the
         // flight as past/upcoming from its actual departure instant (not the tab
         // it was opened from) so historic flights can be logged from anywhere.
-        const departureWallClock = `${originDate}T${originTime}`;
+        const departureWallClock = buildWallClock(originDate, paddedOriginTime);
+        const arrivalWallClock = buildWallClock(destDate, paddedDestTime);
         const hasDeparted = toInstant(departureWallClock, origin.toUpperCase()).getTime() < Date.now();
 
-        onAdd({
+        const trip: FlightInput = {
             origin_code: origin.toUpperCase(),
             origin_city: originData.city,
             destination_code: destination.toUpperCase(),
             destination_city: destData.city,
-            flight_number: `${AIRLINE_CODE}${flightNum}`,
-            departure_time: departureWallClock, // canonical wall-clock (local to origin)
-            arrival_time: `${destDate}T${destTime}`, // canonical wall-clock (local to destination)
+            flight_number: `${AIRLINE_CODE}${formatFlightDigits(flightNum)}`,
+            departure_time: departureWallClock,
+            arrival_time: arrivalWallClock,
             status: hasDeparted ? "completed" : "scheduled",
             type: hasDeparted ? "past" : "future",
-        });
-        onClose();
+        };
+        if (pendingFaFlightId) {
+            trip.fa_flight_id = pendingFaFlightId;
+        }
+
+        setSubmitting(true);
+        try {
+            const ok = await onAdd(trip);
+            if (!ok) return;
+        } finally {
+            setSubmitting(false);
+        }
     };
 
     return (
@@ -494,9 +524,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                 <button
                                     type="submit"
-                                    className="w-full py-5 rounded-2xl bg-white text-black text-sm font-bold tracking-widest uppercase mt-4 hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2"
+                                    disabled={submitting}
+                                    className="w-full py-5 rounded-2xl bg-white text-black text-sm font-bold tracking-widest uppercase mt-4 hover:bg-white/90 active:scale-[0.98] transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:pointer-events-none"
                                 >
-                                    <span className="relative z-10">{flightToEdit ? "Update Journey" : "Confirm Journey"}</span>
+                                    <span className="relative z-10">
+                                        {submitting ? "Saving..." : flightToEdit ? "Update Journey" : "Confirm Journey"}
+                                    </span>
                                     <Plane size={16} className="relative z-10 rotate-45 mb-1" />
                                 </button>
                             </form>
