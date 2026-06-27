@@ -1,10 +1,7 @@
-import type { CanvasTexture, MeshPhongMaterial } from "three";
+import type { MeshBasicMaterial } from "three";
+import { desaturateHex, hexToRgb, mixWithWhite } from "@/lib/colors";
 
 const MASK_URL = "/textures/earth-water.png";
-
-const LAND_RGB = { r: 230, g: 230, b: 230 };
-const LAND_ALPHA = 240;
-const WATER_ALPHA = 40;
 
 function parseColor(color: string): { r: number; g: number; b: number } {
   if (color.startsWith("#")) {
@@ -26,8 +23,23 @@ function parseColor(color: string): { r: number; g: number; b: number } {
   return { r: 0.3, g: 0.4, b: 0.5 };
 }
 
-function processMaskImageData(imageData: ImageData, primaryColor: string) {
+function getLandRgb(primaryColor: string, isLight: boolean): { r: number; g: number; b: number } {
+  if (isLight) {
+    const tinted = desaturateHex(mixWithWhite(primaryColor, 0.35), 0.25);
+    const rgb = hexToRgb(tinted);
+    if (rgb) return rgb;
+    return { r: 210, g: 205, b: 198 };
+  }
+
+  const warmed = mixWithWhite(desaturateHex(primaryColor, 0.4), 0.88);
+  const rgb = hexToRgb(warmed);
+  if (rgb) return rgb;
+  return { r: 235, g: 232, b: 228 };
+}
+
+function processMaskImageData(imageData: ImageData, primaryColor: string, isLight: boolean) {
   const { r: pr, g: pg, b: pb } = parseColor(primaryColor);
+  const land = getLandRgb(primaryColor, isLight);
   const { data } = imageData;
 
   for (let i = 0; i < data.length; i += 4) {
@@ -35,20 +47,23 @@ function processMaskImageData(imageData: ImageData, primaryColor: string) {
     const isWater = luminance >= 127;
 
     if (isWater) {
-      data[i] = Math.round(pr * 50);
-      data[i + 1] = Math.round(pg * 50);
-      data[i + 2] = Math.round(pb * 80);
-      data[i + 3] = WATER_ALPHA;
+      data[i] = Math.round(pr * 255 * (isLight ? 0.55 : 0.45));
+      data[i + 1] = Math.round(pg * 255 * (isLight ? 0.55 : 0.45));
+      data[i + 2] = Math.round(pb * 255 * (isLight ? 0.65 : 0.55));
+      data[i + 3] = isLight ? 85 : 75;
     } else {
-      data[i] = LAND_RGB.r;
-      data[i + 1] = LAND_RGB.g;
-      data[i + 2] = LAND_RGB.b;
-      data[i + 3] = LAND_ALPHA;
+      data[i] = land.r;
+      data[i + 1] = land.g;
+      data[i + 2] = land.b;
+      data[i + 3] = 255;
     }
   }
 }
 
-export function loadGlobeTexture(primaryColor: string): Promise<MeshPhongMaterial> {
+export function loadGlobeTexture(
+  primaryColor: string,
+  isLight = false,
+): Promise<MeshBasicMaterial> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -66,21 +81,22 @@ export function loadGlobeTexture(primaryColor: string): Promise<MeshPhongMateria
 
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      processMaskImageData(imageData, primaryColor);
+      processMaskImageData(imageData, primaryColor, isLight);
       ctx.putImageData(imageData, 0, 0);
 
-      import("three").then((THREE) => {
-        const tex = new THREE.CanvasTexture(canvas);
-        const mat = new THREE.MeshPhongMaterial({
-          map: tex,
-          transparent: true,
-          opacity: 0.85,
-          specular: new THREE.Color(0xffffff),
-          shininess: 100,
-          side: THREE.DoubleSide,
-        });
-        resolve(mat);
-      }).catch(reject);
+      import("three")
+        .then((THREE) => {
+          const tex = new THREE.CanvasTexture(canvas);
+          const mat = new THREE.MeshBasicMaterial({
+            map: tex,
+            transparent: true,
+            opacity: 0.92,
+            depthWrite: true,
+            side: THREE.FrontSide,
+          });
+          resolve(mat);
+        })
+        .catch(reject);
     };
 
     img.onerror = () => reject(new Error(`Failed to load globe mask: ${MASK_URL}`));
