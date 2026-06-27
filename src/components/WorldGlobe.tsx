@@ -10,17 +10,20 @@ import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
+import { findNearbyAirports } from "@/lib/globeUtils";
+import { getReadableTextColors, isLightBackground } from "@/lib/colors";
+import { cn } from "@/lib/utils";
 
 const HOME_BASE = "DXB";
 const TILT_LIMIT = (35 * Math.PI) / 180;
 const AUTO_ROTATE_RESUME_MS = 3000;
 const DESKTOP_GLOBE_ALTITUDE = 3.2;
-/** Higher altitude zooms out; ~40% smaller globe vs previous mobile default of 4.0 */
 const MOBILE_GLOBE_ALTITUDE = 6.7;
+const MAX_VISIBLE_ROUTES = 20;
+const CLUSTER_THRESHOLD_KM = 350;
 
 interface WorldGlobeProps {
   flights: Flight[];
-  /** Theme color used to tint transparent ocean pixels */
   atmosphereColor: string;
 }
 
@@ -39,6 +42,8 @@ interface PointDatum {
   code: string;
   color: string;
   size: number;
+  hasPast: boolean;
+  hasUpcoming: boolean;
 }
 
 function isReturnToHome(flight: Flight): boolean {
@@ -58,8 +63,35 @@ function getGlobeAltitude(isMobile: boolean) {
   return isMobile ? MOBILE_GLOBE_ALTITUDE : DESKTOP_GLOBE_ALTITUDE;
 }
 
+function markerStyle(hasPast: boolean, hasUpcoming: boolean, isSelected: boolean, isMobile: boolean) {
+  const mult = isMobile ? 2.5 : 1.5;
+  let size: number;
+  let color: string;
+
+  if (hasPast && hasUpcoming) {
+    size = 0.42;
+    color = "rgba(255, 255, 255, 0.95)";
+  } else if (hasPast) {
+    size = 0.5;
+    color = "rgba(255, 255, 255, 1)";
+  } else {
+    size = 0.32;
+    color = "rgba(255, 255, 255, 0.55)";
+  }
+
+  if (isSelected) {
+    size *= 1.25;
+    color = "rgba(255, 255, 255, 1)";
+  }
+
+  return { size: size * mult, color };
+}
+
 export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
   const { isMobile, isFullExperience, prefersReducedMotion } = usePerformanceTier();
+  const readable = useMemo(() => getReadableTextColors(atmosphereColor), [atmosphereColor]);
+  const lightBg = useMemo(() => isLightBackground(atmosphereColor), [atmosphereColor]);
+
   const globeRef = useRef<GlobeMethods | null>(null);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsConfiguredRef = useRef(false);
@@ -67,6 +99,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   const [dimensions, setDimensions] = useState(() => getDimensions(isMobile));
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
+  const [clusterOptions, setClusterOptions] = useState<PointDatum[] | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
 
   useEffect(() => {
@@ -89,7 +122,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   useEffect(() => {
     let cancelled = false;
 
-    loadGlobeTexture(atmosphereColor)
+    loadGlobeTexture(atmosphereColor, lightBg)
       .then((mat) => {
         if (!cancelled) setMaterial(mat);
       })
@@ -100,69 +133,93 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     return () => {
       cancelled = true;
     };
-  }, [atmosphereColor]);
+  }, [atmosphereColor, lightBg]);
 
-  const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371;
-    const dLat = ((lat2 - lat1) * Math.PI) / 180;
-    const dLon = ((lon2 - lon1) * Math.PI) / 180;
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
-  const points = useMemo(() => {
-    const seen = new Set<string>();
-    const pts: PointDatum[] = [];
-    const isMobileDevice = isMobile;
+  const airportStatus = useMemo(() => {
+    const status: Record<string, { past: boolean; upcoming: boolean }> = {};
 
     flights.forEach((f) => {
+      if (isReturnToHome(f)) return;
       const past = isPast(f);
       [f.origin_code, f.destination_code].forEach((code) => {
-        if (!seen.has(code)) {
-          seen.add(code);
-          const ap = AIRPORTS[code];
-          if (ap && ap.lat !== undefined && ap.lng !== undefined) {
-            let size = past ? 0.45 : 0.25;
-            size *= isMobileDevice ? 2.5 : 1.5;
-            pts.push({
-              lat: ap.lat,
-              lng: ap.lng,
-              code,
-              color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.6)",
-              size,
-            });
-          }
-        }
+        if (!status[code]) status[code] = { past: false, upcoming: false };
+        if (past) status[code].past = true;
+        else status[code].upcoming = true;
       });
     });
+
+    return status;
+  }, [flights]);
+
+  const basePoints = useMemo(() => {
+    const pts: PointDatum[] = [];
+
+    Object.entries(airportStatus).forEach(([code, { past, upcoming }]) => {
+      const ap = AIRPORTS[code];
+      if (!ap || ap.lat === undefined || ap.lng === undefined) return;
+
+      const { size, color } = markerStyle(past, upcoming, false, isMobile);
+      pts.push({
+        lat: ap.lat,
+        lng: ap.lng,
+        code,
+        color,
+        size,
+        hasPast: past,
+        hasUpcoming: upcoming,
+      });
+    });
+
     return pts;
-  }, [flights, isMobile]);
+  }, [airportStatus, isMobile]);
+
+  const displayPoints = useMemo(() => {
+    return basePoints.map((p) => {
+      const isSelected = selectedPoint?.code === p.code;
+      if (!isSelected) return p;
+      const { size, color } = markerStyle(p.hasPast, p.hasUpcoming, true, isMobile);
+      return { ...p, size, color };
+    });
+  }, [basePoints, selectedPoint, isMobile]);
+
+  const selectAirport = useCallback((point: PointDatum | null) => {
+    setClusterOptions(null);
+    setSelectedPoint(point);
+  }, []);
+
+  const toggleAirport = useCallback(
+    (point: PointDatum) => {
+      setClusterOptions(null);
+      setSelectedPoint((prev) => (prev?.code === point.code ? null : point));
+    },
+    [],
+  );
+
+  const handlePointClick = useCallback(
+    (point: object) => {
+      toggleAirport(point as PointDatum);
+    },
+    [toggleAirport],
+  );
 
   const handleGlobeClick = useCallback(
     ({ lat, lng }: { lat: number; lng: number }) => {
-      const THRESHOLD = 500;
-      let closestPoint: PointDatum | null = null;
-      let minDistance = Infinity;
+      const nearby = findNearbyAirports(lat, lng, basePoints, CLUSTER_THRESHOLD_KM);
 
-      points.forEach((p) => {
-        const dist = getDistance(lat, lng, p.lat, p.lng);
-        if (dist < minDistance && dist < THRESHOLD) {
-          minDistance = dist;
-          closestPoint = p;
-        }
-      });
+      if (nearby.length === 0) {
+        selectAirport(null);
+        return;
+      }
 
-      setSelectedPoint((prev) =>
-        closestPoint && prev?.code === closestPoint.code ? null : closestPoint,
-      );
+      if (nearby.length === 1) {
+        toggleAirport(nearby[0]);
+        return;
+      }
+
+      setSelectedPoint(null);
+      setClusterOptions(nearby);
     },
-    [points],
+    [basePoints, selectAirport, toggleAirport],
   );
 
   const resumeAutoRotate = useCallback(() => {
@@ -252,7 +309,6 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
 
     const retryConfigure = () => {
       if (cancelled) return;
-
       if (tryConfigureGlobe()) return;
 
       configureAttemptsRef.current += 1;
@@ -288,10 +344,17 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   }, [flights]);
 
   const arcs = useMemo(() => {
-    return flights
+    if (!selectedPoint) return [] as ArcDatum[];
+
+    const routes = flights
+      .filter((f) => {
+        if (isReturnToHome(f)) return false;
+        return f.origin_code === selectedPoint.code || f.destination_code === selectedPoint.code;
+      })
+      .slice(0, MAX_VISIBLE_ROUTES)
       .map((f) => {
-        const origin = AIRPORTS[f.origin_code],
-          dest = AIRPORTS[f.destination_code];
+        const origin = AIRPORTS[f.origin_code];
+        const dest = AIRPORTS[f.destination_code];
         if (!origin || !dest) return null;
         const past = isPast(f);
         return {
@@ -299,21 +362,16 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
           startLng: origin.lng,
           endLat: dest.lat,
           endLng: dest.lng,
-          color: past ? "rgba(255, 255, 255, 1)" : "rgba(255, 255, 255, 0.5)",
+          color: past ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.3)",
           isPast: past,
         };
       })
       .filter(Boolean) as ArcDatum[];
-  }, [flights]);
 
-  const uniqueAirportCount = useMemo(() => {
-    const s = new Set<string>();
-    flights.forEach((f) => {
-      s.add(f.origin_code);
-      s.add(f.destination_code);
-    });
-    return s.size;
-  }, [flights]);
+    return routes;
+  }, [flights, selectedPoint]);
+
+  const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
 
   const countableFlights = useMemo(
     () => flights.filter((f) => !isReturnToHome(f)),
@@ -325,27 +383,61 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   );
   const upcomingCount = countableFlights.length - pastCount;
 
+  const pillClass = lightBg
+    ? "bg-neutral-950/75 border-neutral-900/15"
+    : "glass-dark border-white/10";
+
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-4 pointer-events-none text-white">
+      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
         <div
-          className="flex items-center gap-4 px-5 py-2 rounded-full glass-dark border border-white/10"
+          className={cn("flex items-center gap-4 px-5 py-2 rounded-full border", pillClass)}
           aria-label={`${uniqueAirportCount} airports, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
         >
-          <StatPill value={uniqueAirportCount} label="Airports" />
-          <div className="w-[1px] h-3 bg-white/20" />
-          <StatPill value={pastCount} label="Past" />
+          <StatPill value={uniqueAirportCount} label="Airports" colors={readable} />
+          <div className="w-[1px] h-3" style={{ backgroundColor: readable.muted }} />
+          <StatPill value={pastCount} label="Past" colors={readable} />
           {upcomingCount > 0 && (
             <>
-              <div className="w-[1px] h-3 bg-white/20" />
-              <StatPill value={upcomingCount} label="Upcoming" dim />
+              <div className="w-[1px] h-3" style={{ backgroundColor: readable.muted }} />
+              <StatPill value={upcomingCount} label="Upcoming" colors={readable} dim />
             </>
           )}
         </div>
-        <div className="flex items-center gap-5 opacity-90">
-          <LegendItem label="Past" dashed={false} />
-          <LegendItem label="Upcoming" dashed />
+
+        <div className="flex items-center gap-5">
+          <LegendMarker label="Past" solid colors={readable} />
+          <LegendMarker label="Upcoming" solid={false} colors={readable} />
         </div>
+
+        {clusterOptions && clusterOptions.length > 1 && (
+          <div
+            className={cn(
+              "pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3 py-2 rounded-2xl border max-w-[90vw]",
+              pillClass,
+            )}
+            role="listbox"
+            aria-label="Select airport"
+          >
+            {clusterOptions.map((p) => (
+              <button
+                key={p.code}
+                type="button"
+                role="option"
+                onClick={() => selectAirport(p)}
+                className={cn(
+                  "px-3 py-1.5 rounded-full text-xs font-black tracking-wider border transition-colors",
+                  lightBg
+                    ? "border-neutral-900/20 hover:bg-neutral-900/10"
+                    : "border-white/20 hover:bg-white/10",
+                )}
+                style={{ color: readable.primary }}
+              >
+                {p.code}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <motion.div
@@ -365,20 +457,22 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
             showAtmosphere={false}
             onGlobeReady={handleGlobeReady}
             onGlobeClick={handleGlobeClick}
+            onPointClick={handlePointClick}
             arcsData={arcs}
             arcStartLat={(d: object) => (d as ArcDatum).startLat}
             arcStartLng={(d: object) => (d as ArcDatum).startLng}
             arcEndLat={(d: object) => (d as ArcDatum).endLat}
             arcEndLng={(d: object) => (d as ArcDatum).endLng}
             arcColor={(d: object) => (d as ArcDatum).color}
-            arcStroke={(d: object) => ((d as ArcDatum).isPast ? 1.4 : 0.8)}
-            arcDashLength={0}
-            arcDashGap={0}
+            arcStroke={(d: object) => ((d as ArcDatum).isPast ? 0.6 : 0.5)}
+            arcAltitude={0.015}
+            arcDashLength={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.4)}
+            arcDashGap={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.25)}
             arcDashAnimateTime={0}
-            pointsData={points}
+            pointsData={displayPoints}
             pointColor={(d: object) => (d as PointDatum).color}
             pointRadius={(d: object) => (d as PointDatum).size}
-            pointAltitude={0.01}
+            pointAltitude={0.015}
             htmlElementsData={selectedPoint ? [selectedPoint] : []}
             htmlElement={(d: object) => {
               const point = d as PointDatum;
@@ -387,7 +481,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
               const el = document.createElement("div");
               el.innerHTML = `
               <div class="flex flex-col items-center" style="transform: translate(-50%, -100%); margin-top: -10px; pointer-events: none;">
-                <div style="background: rgba(10,10,10,0.95); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(20px); padding: 12px 16px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); min-width: 140px;">
+                <div style="background: rgba(10,10,10,0.95); border: 1px solid rgba(255,255,255,0.2); padding: 12px 16px; border-radius: 12px; box-shadow: 0 20px 40px rgba(0,0,0,0.4); min-width: 140px;">
                   <div style="display: flex; flex-direction: column; gap: 2px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
                       <span style="font-size: 24px; font-weight: 900; letter-spacing: -0.05em; color: white; line-height: 1;">${point.code}</span>
@@ -413,31 +507,53 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   );
 }
 
-function StatPill({ value, label, dim = false }: { value: number; label: string; dim?: boolean }) {
+function StatPill({
+  value,
+  label,
+  dim = false,
+  colors,
+}: {
+  value: number;
+  label: string;
+  dim?: boolean;
+  colors: ReturnType<typeof getReadableTextColors>;
+}) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className={`text-xs font-bold ${dim ? "text-white/60" : "text-white"}`}>{value}</span>
-      <span className="text-[9px] font-bold tracking-widest uppercase text-white/60">{label}</span>
+      <span
+        className="text-xs font-bold"
+        style={{ color: dim ? colors.muted : colors.primary }}
+      >
+        {value}
+      </span>
+      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: colors.muted }}>
+        {label}
+      </span>
     </div>
   );
 }
 
-function LegendItem({ label, dashed }: { label: string; dashed: boolean }) {
+function LegendMarker({
+  label,
+  solid,
+  colors,
+}: {
+  label: string;
+  solid: boolean;
+  colors: ReturnType<typeof getReadableTextColors>;
+}) {
   return (
     <div className="flex items-center gap-2">
       <div
+        className="rounded-full"
         style={{
-          height: 0,
-          width: 20,
-          borderTopWidth: 2,
-          borderTopStyle: dashed ? "dashed" : "solid",
-          borderTopColor: dashed ? "rgba(255,255,255,0.6)" : "rgba(255, 255, 255, 1)",
+          width: solid ? 8 : 6,
+          height: solid ? 8 : 6,
+          backgroundColor: solid ? colors.primary : colors.muted,
+          opacity: solid ? 1 : 0.7,
         }}
       />
-      <span
-        className="text-[9px] font-bold tracking-widest uppercase"
-        style={{ color: dashed ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,1)" }}
-      >
+      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: colors.secondary }}>
         {label}
       </span>
     </div>
