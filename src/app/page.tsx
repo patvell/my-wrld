@@ -20,6 +20,7 @@ import { History, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { cn } from "@/lib/utils";
+import { preloadGlobeModule } from "@/lib/preloadGlobe";
 
 export default function Home() {
   const [[activeTab, direction], setActiveTab] = useState<["home" | "history" | "settings" | "world", number]>(["home", 0]);
@@ -58,6 +59,10 @@ export default function Home() {
 
   useEffect(() => {
     fetchFlights();
+  }, []);
+
+  useEffect(() => {
+    preloadGlobeModule();
   }, []);
 
   const fetchFlights = async () => {

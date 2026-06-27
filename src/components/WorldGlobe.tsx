@@ -50,9 +50,11 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   const globeRef = useRef<GlobeMethods | null>(null);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsConfiguredRef = useRef(false);
+  const configureAttemptsRef = useRef(0);
   const [dimensions, setDimensions] = useState(getDimensions);
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
+  const [globeInitialized, setGlobeInitialized] = useState(false);
 
   const prefersReducedMotion = useMemo(
     () =>
@@ -164,6 +166,13 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     autoRotateTimerRef.current = setTimeout(resumeAutoRotate, AUTO_ROTATE_RESUME_MS);
   }, [resumeAutoRotate]);
 
+  const enforceGlobeRestrictions = useCallback((controls: NonNullable<ReturnType<GlobeMethods["controls"]>>) => {
+    controls.enableZoom = false;
+    controls.enablePan = false;
+    controls.minPolarAngle = Math.PI / 2 - TILT_LIMIT;
+    controls.maxPolarAngle = Math.PI / 2 + TILT_LIMIT;
+  }, []);
+
   const configureGlobeControls = useCallback(
     (globe: GlobeMethods) => {
       const controls = globe.controls();
@@ -171,12 +180,12 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
 
       controls.autoRotate = !prefersReducedMotion;
       controls.autoRotateSpeed = 0.3;
-      controls.enableZoom = false;
-      controls.enablePan = false;
-      controls.minPolarAngle = Math.PI / 2 - TILT_LIMIT;
-      controls.maxPolarAngle = Math.PI / 2 + TILT_LIMIT;
+      enforceGlobeRestrictions(controls);
 
       if (!controlsConfiguredRef.current) {
+        controls.addEventListener("change", () => {
+          enforceGlobeRestrictions(controls);
+        });
         controls.addEventListener("start", () => {
           controls.autoRotate = false;
           if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
@@ -185,36 +194,71 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
         controlsConfiguredRef.current = true;
       }
 
-      return true;
+      return !controls.enableZoom;
     },
-    [prefersReducedMotion, scheduleAutoRotateResume],
+    [enforceGlobeRestrictions, prefersReducedMotion, scheduleAutoRotateResume],
+  );
+
+  const setInitialPointOfView = useCallback((globe: GlobeMethods) => {
+    const isMobile = window.innerWidth < 768;
+    globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
+  }, []);
+
+  const tryConfigureGlobe = useCallback(() => {
+    const globe = globeRef.current;
+    if (!globe) return false;
+
+    if (!configureGlobeControls(globe)) return false;
+
+    if (!globeInitialized) {
+      setInitialPointOfView(globe);
+      setGlobeInitialized(true);
+    }
+
+    return true;
+  }, [configureGlobeControls, globeInitialized, setInitialPointOfView]);
+
+  const handleGlobeRef = useCallback(
+    (instance: GlobeMethods | null) => {
+      globeRef.current = instance;
+      if (instance) tryConfigureGlobe();
+    },
+    [tryConfigureGlobe],
   );
 
   const handleGlobeReady = useCallback(() => {
-    let attempts = 0;
+    tryConfigureGlobe();
+  }, [tryConfigureGlobe]);
 
-    const tryConfigure = () => {
-      const globe = globeRef.current;
-      if (!globe?.controls) {
-        if (attempts++ < 20) requestAnimationFrame(tryConfigure);
-        return;
+  useEffect(() => {
+    if (!material) return;
+
+    configureAttemptsRef.current = 0;
+    let cancelled = false;
+
+    const retryConfigure = () => {
+      if (cancelled) return;
+
+      if (tryConfigureGlobe()) return;
+
+      configureAttemptsRef.current += 1;
+      if (configureAttemptsRef.current < 120) {
+        window.setTimeout(retryConfigure, 50);
       }
-
-      if (!configureGlobeControls(globe)) {
-        if (attempts++ < 20) requestAnimationFrame(tryConfigure);
-        return;
-      }
-
-      const isMobile = window.innerWidth < 768;
-      globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
     };
 
-    tryConfigure();
-  }, [configureGlobeControls]);
+    retryConfigure();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [material, tryConfigureGlobe]);
 
   useEffect(() => {
     return () => {
       controlsConfiguredRef.current = false;
+      configureAttemptsRef.current = 0;
+      setGlobeInitialized(false);
       if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
     };
   }, []);
@@ -298,7 +342,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       >
         {material && (
           <Globe
-            ref={globeRef}
+            ref={handleGlobeRef}
             width={dimensions.width}
             height={dimensions.height}
             backgroundColor="rgba(0,0,0,0)"
