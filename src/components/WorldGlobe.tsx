@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useMemo, useState, useCallback } from "react"
 import dynamic from "next/dynamic";
 import { Flight } from "@/types";
 import { AIRPORTS } from "@/data/airports";
+import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 
 const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
@@ -44,7 +45,7 @@ function isReturnToHome(flight: Flight): boolean {
   return flight.destination_code === HOME_BASE;
 }
 
-export default function WorldGlobe({ flights }: WorldGlobeProps) {
+export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
   const globeRef = useRef<any>(null);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dimensions, setDimensions] = useState({ width: 390, height: 844 });
@@ -59,40 +60,20 @@ export default function WorldGlobe({ flights }: WorldGlobeProps) {
   }, []);
 
   useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        const brightness = (r + g + b) / 3;
-        const isWater = b > r && b > g && brightness < 60;
-        if (isWater) {
-          data[i + 3] = 40;
-        } else {
-          data[i] = 230; data[i + 1] = 230; data[i + 2] = 230;
-          data[i + 3] = 240;
-        }
-      }
-      ctx.putImageData(imageData, 0, 0);
-      import("three").then((THREE) => {
-        const tex = new THREE.CanvasTexture(canvas);
-        const mat = new THREE.MeshPhongMaterial({
-          map: tex, transparent: true, opacity: 0.85,
-          specular: new THREE.Color(0xffffff), shininess: 100, side: THREE.DoubleSide,
-        });
-        setCustomMaterial(mat);
+    let cancelled = false;
+
+    loadGlobeTexture(primaryColor)
+      .then((material) => {
+        if (!cancelled) setCustomMaterial(material);
+      })
+      .catch((error) => {
+        console.error("Failed to load globe texture:", error);
       });
+
+    return () => {
+      cancelled = true;
     };
-  }, []);
+  }, [primaryColor]);
 
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371;
@@ -252,12 +233,12 @@ export default function WorldGlobe({ flights }: WorldGlobeProps) {
       </div>
 
       <div className="absolute inset-0 flex items-center justify-center">
+        {customMaterial && (
         <Globe
           ref={globeRef}
           width={dimensions.width}
           height={dimensions.height}
           backgroundColor="rgba(0,0,0,0)"
-          globeImageUrl={customMaterial ? undefined : "https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg"}
           globeMaterial={customMaterial}
           showGraticules={true}
           showAtmosphere={false}
@@ -304,6 +285,7 @@ export default function WorldGlobe({ flights }: WorldGlobeProps) {
             return el;
           }}
         />
+        )}
       </div>
     </div>
   );
