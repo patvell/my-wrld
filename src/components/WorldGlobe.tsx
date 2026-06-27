@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import type { Material } from "three";
 import type { GlobeMethods } from "react-globe.gl";
@@ -9,8 +8,7 @@ import { Flight } from "@/types";
 import { AIRPORTS } from "@/data/airports";
 import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
-
-const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
+import Globe from "@/components/GlobeCanvas";
 
 const HOME_BASE = "DXB";
 const TILT_LIMIT = (35 * Math.PI) / 180;
@@ -49,8 +47,9 @@ function getDimensions() {
 }
 
 export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
-  const globeRef = useRef<GlobeMethods | undefined>(undefined);
+  const globeRef = useRef<GlobeMethods | null>(null);
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const controlsConfiguredRef = useRef(false);
   const [dimensions, setDimensions] = useState(getDimensions);
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
@@ -165,11 +164,11 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     autoRotateTimerRef.current = setTimeout(resumeAutoRotate, AUTO_ROTATE_RESUME_MS);
   }, [resumeAutoRotate]);
 
-  const handleGlobeReady = useCallback(() => {
-    const globe = globeRef.current;
-    if (!globe) return;
-    const controls = globe.controls();
-    if (controls) {
+  const configureGlobeControls = useCallback(
+    (globe: GlobeMethods) => {
+      const controls = globe.controls();
+      if (!controls) return false;
+
       controls.autoRotate = !prefersReducedMotion;
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
@@ -177,18 +176,45 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       controls.minPolarAngle = Math.PI / 2 - TILT_LIMIT;
       controls.maxPolarAngle = Math.PI / 2 + TILT_LIMIT;
 
-      controls.addEventListener("start", () => {
-        controls.autoRotate = false;
-        if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
-      });
-      controls.addEventListener("end", scheduleAutoRotateResume);
-    }
-    const isMobile = window.innerWidth < 768;
-    globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
-  }, [prefersReducedMotion, scheduleAutoRotateResume]);
+      if (!controlsConfiguredRef.current) {
+        controls.addEventListener("start", () => {
+          controls.autoRotate = false;
+          if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+        });
+        controls.addEventListener("end", scheduleAutoRotateResume);
+        controlsConfiguredRef.current = true;
+      }
+
+      return true;
+    },
+    [prefersReducedMotion, scheduleAutoRotateResume],
+  );
+
+  const handleGlobeReady = useCallback(() => {
+    let attempts = 0;
+
+    const tryConfigure = () => {
+      const globe = globeRef.current;
+      if (!globe?.controls) {
+        if (attempts++ < 20) requestAnimationFrame(tryConfigure);
+        return;
+      }
+
+      if (!configureGlobeControls(globe)) {
+        if (attempts++ < 20) requestAnimationFrame(tryConfigure);
+        return;
+      }
+
+      const isMobile = window.innerWidth < 768;
+      globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
+    };
+
+    tryConfigure();
+  }, [configureGlobeControls]);
 
   useEffect(() => {
     return () => {
+      controlsConfiguredRef.current = false;
       if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
     };
   }, []);
