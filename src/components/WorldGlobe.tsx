@@ -11,7 +11,7 @@ import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import { findNearbyAirports } from "@/lib/globeUtils";
-import { getReadableTextColors, isLightBackground } from "@/lib/colors";
+import { hexToRgba, isLightBackground } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 
 const HOME_BASE = "DXB";
@@ -25,7 +25,10 @@ const CLUSTER_THRESHOLD_KM = 350;
 interface WorldGlobeProps {
   flights: Flight[];
   atmosphereColor: string;
+  chromeColor: string;
 }
+
+const NAV_PILL_CLASS = "glass-dark rounded-full shadow-2xl border-white/5";
 
 interface ArcDatum {
   startLat: number;
@@ -63,33 +66,38 @@ function getGlobeAltitude(isMobile: boolean) {
   return isMobile ? MOBILE_GLOBE_ALTITUDE : DESKTOP_GLOBE_ALTITUDE;
 }
 
-function markerStyle(hasPast: boolean, hasUpcoming: boolean, isSelected: boolean, isMobile: boolean) {
+function markerStyle(
+  chromeColor: string,
+  hasPast: boolean,
+  hasUpcoming: boolean,
+  isSelected: boolean,
+  isMobile: boolean,
+) {
   const mult = isMobile ? 2.5 : 1.5;
   let size: number;
-  let color: string;
+  let alpha: number;
 
   if (hasPast && hasUpcoming) {
     size = 0.42;
-    color = "rgba(255, 255, 255, 0.95)";
+    alpha = 0.95;
   } else if (hasPast) {
     size = 0.5;
-    color = "rgba(255, 255, 255, 1)";
+    alpha = 1;
   } else {
     size = 0.32;
-    color = "rgba(255, 255, 255, 0.55)";
+    alpha = 0.6;
   }
 
   if (isSelected) {
     size *= 1.25;
-    color = "rgba(255, 255, 255, 1)";
+    alpha = 1;
   }
 
-  return { size: size * mult, color };
+  return { size: size * mult, color: hexToRgba(chromeColor, alpha) };
 }
 
-export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
+export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: WorldGlobeProps) {
   const { isMobile, isFullExperience, prefersReducedMotion } = usePerformanceTier();
-  const readable = useMemo(() => getReadableTextColors(atmosphereColor), [atmosphereColor]);
   const lightBg = useMemo(() => isLightBackground(atmosphereColor), [atmosphereColor]);
 
   const globeRef = useRef<GlobeMethods | null>(null);
@@ -158,7 +166,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       const ap = AIRPORTS[code];
       if (!ap || ap.lat === undefined || ap.lng === undefined) return;
 
-      const { size, color } = markerStyle(past, upcoming, false, isMobile);
+      const { size, color } = markerStyle(chromeColor, past, upcoming, false, isMobile);
       pts.push({
         lat: ap.lat,
         lng: ap.lng,
@@ -171,16 +179,16 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     });
 
     return pts;
-  }, [airportStatus, isMobile]);
+  }, [airportStatus, chromeColor, isMobile]);
 
   const displayPoints = useMemo(() => {
     return basePoints.map((p) => {
       const isSelected = selectedPoint?.code === p.code;
       if (!isSelected) return p;
-      const { size, color } = markerStyle(p.hasPast, p.hasUpcoming, true, isMobile);
+      const { size, color } = markerStyle(chromeColor, p.hasPast, p.hasUpcoming, true, isMobile);
       return { ...p, size, color };
     });
-  }, [basePoints, selectedPoint, isMobile]);
+  }, [basePoints, chromeColor, selectedPoint, isMobile]);
 
   const selectAirport = useCallback((point: PointDatum | null) => {
     setClusterOptions(null);
@@ -362,14 +370,14 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
           startLng: origin.lng,
           endLat: dest.lat,
           endLng: dest.lng,
-          color: past ? "rgba(255, 255, 255, 0.45)" : "rgba(255, 255, 255, 0.3)",
+          color: past ? hexToRgba(chromeColor, 0.45) : hexToRgba(chromeColor, 0.3),
           isPast: past,
         };
       })
       .filter(Boolean) as ArcDatum[];
 
     return routes;
-  }, [flights, selectedPoint]);
+  }, [flights, selectedPoint, chromeColor]);
 
   const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
 
@@ -383,38 +391,29 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
   );
   const upcomingCount = countableFlights.length - pastCount;
 
-  const pillClass = lightBg
-    ? "bg-neutral-950/75 border-neutral-900/15"
-    : "glass-dark border-white/10";
-
   return (
     <div className="relative w-full h-full">
       <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
         <div
-          className={cn("flex items-center gap-4 px-5 py-2 rounded-full border", pillClass)}
+          className={cn("flex items-center gap-4 px-5 py-2 border", NAV_PILL_CLASS)}
           aria-label={`${uniqueAirportCount} airports, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
         >
-          <StatPill value={uniqueAirportCount} label="Airports" colors={readable} />
-          <div className="w-[1px] h-3" style={{ backgroundColor: readable.muted }} />
-          <StatPill value={pastCount} label="Past" colors={readable} />
+          <StatPill value={uniqueAirportCount} label="Airports" />
+          <div className="w-[1px] h-3 bg-white/10" />
+          <StatPill value={pastCount} label="Past" />
           {upcomingCount > 0 && (
             <>
-              <div className="w-[1px] h-3" style={{ backgroundColor: readable.muted }} />
-              <StatPill value={upcomingCount} label="Upcoming" colors={readable} dim />
+              <div className="w-[1px] h-3 bg-white/10" />
+              <StatPill value={upcomingCount} label="Upcoming" dim />
             </>
           )}
-        </div>
-
-        <div className="flex items-center gap-5">
-          <LegendMarker label="Past" solid colors={readable} />
-          <LegendMarker label="Upcoming" solid={false} colors={readable} />
         </div>
 
         {clusterOptions && clusterOptions.length > 1 && (
           <div
             className={cn(
-              "pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3 py-2 rounded-2xl border max-w-[90vw]",
-              pillClass,
+              "pointer-events-auto flex flex-wrap items-center justify-center gap-2 px-3 py-2 border max-w-[90vw]",
+              NAV_PILL_CLASS,
             )}
             role="listbox"
             aria-label="Select airport"
@@ -425,13 +424,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
                 type="button"
                 role="option"
                 onClick={() => selectAirport(p)}
-                className={cn(
-                  "px-3 py-1.5 rounded-full text-xs font-black tracking-wider border transition-colors",
-                  lightBg
-                    ? "border-neutral-900/20 hover:bg-neutral-900/10"
-                    : "border-white/20 hover:bg-white/10",
-                )}
-                style={{ color: readable.primary }}
+                className="px-3 py-1.5 rounded-full text-xs font-black tracking-wider border border-white/20 text-white transition-colors hover:bg-white/10"
               >
                 {p.code}
               </button>
@@ -511,51 +504,15 @@ function StatPill({
   value,
   label,
   dim = false,
-  colors,
 }: {
   value: number;
   label: string;
   dim?: boolean;
-  colors: ReturnType<typeof getReadableTextColors>;
 }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span
-        className="text-xs font-bold"
-        style={{ color: dim ? colors.muted : colors.primary }}
-      >
-        {value}
-      </span>
-      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: colors.muted }}>
-        {label}
-      </span>
-    </div>
-  );
-}
-
-function LegendMarker({
-  label,
-  solid,
-  colors,
-}: {
-  label: string;
-  solid: boolean;
-  colors: ReturnType<typeof getReadableTextColors>;
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <div
-        className="rounded-full"
-        style={{
-          width: solid ? 8 : 6,
-          height: solid ? 8 : 6,
-          backgroundColor: solid ? colors.primary : colors.muted,
-          opacity: solid ? 1 : 0.7,
-        }}
-      />
-      <span className="text-[9px] font-bold tracking-widest uppercase" style={{ color: colors.secondary }}>
-        {label}
-      </span>
+      <span className={cn("text-xs font-bold", dim ? "text-white/50" : "text-white")}>{value}</span>
+      <span className="text-[9px] font-bold tracking-widest uppercase text-white/40">{label}</span>
     </div>
   );
 }
