@@ -1,4 +1,4 @@
-import type { CanvasTexture, MeshPhongMaterial } from "three";
+import type { MeshBasicMaterial } from "three";
 import { desaturateHex, hexToRgb, mixWithWhite } from "@/lib/colors";
 
 const MASK_URL = "/textures/earth-water.png";
@@ -63,7 +63,7 @@ function processMaskImageData(imageData: ImageData, primaryColor: string, isLigh
 export function loadGlobeTexture(
   primaryColor: string,
   isLight = false,
-): Promise<MeshPhongMaterial> {
+): Promise<MeshBasicMaterial> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -87,13 +87,11 @@ export function loadGlobeTexture(
       import("three")
         .then((THREE) => {
           const tex = new THREE.CanvasTexture(canvas);
-          const mat = new THREE.MeshPhongMaterial({
+          const mat = new THREE.MeshBasicMaterial({
             map: tex,
             transparent: true,
             opacity: 0.92,
             depthWrite: true,
-            specular: new THREE.Color(0xffffff),
-            shininess: 40,
             side: THREE.FrontSide,
           });
           resolve(mat);
