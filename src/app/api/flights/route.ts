@@ -1,10 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { getUserId } from '@/lib/auth';
+import { createFlightSchema } from '@/lib/validation';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const db = await getDb();
-    const result = await db.execute('SELECT * FROM flights ORDER BY departure_time ASC');
+    const userId = getUserId(request);
+    const result = await db.execute({
+      sql: 'SELECT * FROM flights WHERE user_id = ? ORDER BY departure_time ASC',
+      args: [userId],
+    });
     return NextResponse.json(result.rows);
   } catch (error) {
     console.error('Error fetching flights:', error);
@@ -15,9 +21,18 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const db = await getDb();
+    const userId = getUserId(request);
     const body = await request.json();
 
-    const id = body.id || crypto.randomUUID();
+    const parsed = createFlightSchema.safeParse(body);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid flight', details: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
+    const data = parsed.data;
+    const id = crypto.randomUUID();
 
     await db.execute({
       sql: `INSERT INTO flights (
@@ -26,22 +41,24 @@ export async function POST(request: Request) {
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       args: [
         id,
-        body.origin_code,
-        body.origin_city,
-        body.destination_code,
-        body.destination_city,
-        body.departure_time,
-        body.arrival_time,
-        body.flight_number || null,
-        body.status || null,
-        body.type || null,
-        body.confirmed_at || null,
-        body.user_id || null,
+        data.origin_code,
+        data.origin_city,
+        data.destination_code,
+        data.destination_city,
+        data.departure_time,
+        data.arrival_time,
+        data.flight_number ?? null,
+        data.status ?? null,
+        data.type ?? null,
+        data.confirmed_at ?? null,
+        userId,
       ],
     });
 
-    // Return the created flight
-    const flight = await db.execute({ sql: 'SELECT * FROM flights WHERE id = ?', args: [id] });
+    const flight = await db.execute({
+      sql: 'SELECT * FROM flights WHERE id = ? AND user_id = ?',
+      args: [id, userId],
+    });
     return NextResponse.json(flight.rows[0], { status: 201 });
   } catch (error) {
     console.error('Error creating flight:', error);
