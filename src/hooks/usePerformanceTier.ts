@@ -20,8 +20,15 @@ function computeTier(isMobile: boolean, prefersReducedMotion: boolean): Performa
   return "full";
 }
 
+function readTier(): PerformanceTier {
+  const mobileQuery = getMobileQuery();
+  const motionQuery = getReducedMotionQuery();
+  if (!mobileQuery || !motionQuery) return "full";
+  return computeTier(mobileQuery.matches, motionQuery.matches);
+}
+
 export function usePerformanceTier() {
-  const [tier, setTier] = useState<PerformanceTier>("full");
+  const [tier, setTier] = useState<PerformanceTier>(readTier);
 
   useEffect(() => {
     const mobileQuery = getMobileQuery();

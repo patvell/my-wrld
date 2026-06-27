@@ -164,26 +164,24 @@ export default function Home() {
     () =>
       isFullExperience
         ? {
-            hidden: { y: 20, opacity: 0, scale: 0.95, filter: "blur(4px)" },
+            hidden: { y: 20, opacity: 0, scale: 0.95 },
             show: {
               y: 0,
               opacity: 1,
               scale: 1,
-              filter: "blur(0px)",
               transition: { type: "spring" as const, stiffness: 150, damping: 20, mass: 0.8 },
             },
             exit: {
               y: -20,
               opacity: 0,
               scale: 0.95,
-              filter: "blur(4px)",
               transition: { duration: 0.15, ease: "easeIn" as const },
             },
           }
         : {
-            hidden: { y: 12, opacity: 0 },
-            show: { y: 0, opacity: 1, transition: { duration: 0.2, ease: "easeOut" as const } },
-            exit: { y: -12, opacity: 0, transition: { duration: 0.12, ease: "easeIn" as const } },
+            hidden: { y: 12, opacity: 0, filter: "none" },
+            show: { y: 0, opacity: 1, filter: "none", transition: { duration: 0.2, ease: "easeOut" as const } },
+            exit: { y: -12, opacity: 0, filter: "none", transition: { duration: 0.12, ease: "easeIn" as const } },
           },
     [isFullExperience],
   );
