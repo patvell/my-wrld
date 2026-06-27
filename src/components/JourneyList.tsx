@@ -4,8 +4,9 @@ import { Undo2, Moon } from "lucide-react";
 import { Flight } from "@/types";
 import DigitalBoardingPass from "@/components/DigitalBoardingPass";
 import { isActive as isFlightActive, isLayoverBetween } from "@/lib/time";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
-const cardVariants = {
+const fullCardVariants = {
   hidden: { y: 20, opacity: 0, scale: 0.95, filter: "blur(4px)" },
   show: {
     y: 0,
@@ -20,6 +21,20 @@ const cardVariants = {
     scale: 0.95,
     filter: "blur(4px)",
     transition: { duration: 0.15, ease: "easeIn" as const },
+  },
+};
+
+const mobileCardVariants = {
+  hidden: { y: 12, opacity: 0 },
+  show: {
+    y: 0,
+    opacity: 1,
+    transition: { duration: 0.2, ease: "easeOut" as const },
+  },
+  exit: {
+    y: -12,
+    opacity: 0,
+    transition: { duration: 0.12, ease: "easeIn" as const },
   },
 };
 
@@ -45,6 +60,9 @@ export default function JourneyList({
   showLiveStatus = false,
   keyPrefix,
 }: JourneyListProps) {
+  const { isFullExperience } = usePerformanceTier();
+  const cardVariants = isFullExperience ? fullCardVariants : mobileCardVariants;
+
   return (
     <>
       {journeys.map((journey, jIdx) => (
@@ -65,7 +83,6 @@ export default function JourneyList({
                   variants={cardVariants}
                   initial="hidden"
                   animate="show"
-                  layout
                   className="w-full relative z-20"
                 >
                   <DigitalBoardingPass
