@@ -8,13 +8,17 @@ import type { GlobeMethods } from "react-globe.gl";
 import { Flight } from "@/types";
 import { AIRPORTS } from "@/data/airports";
 import { isPast } from "@/lib/time";
+import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 
 const Globe = dynamic(() => import("react-globe.gl"), { ssr: false });
 
-const TEXTURE_URL = "/earth-blue-marble.jpg";
+const HOME_BASE = "DXB";
+const TILT_LIMIT = (35 * Math.PI) / 180;
+const AUTO_ROTATE_RESUME_MS = 3000;
 
 interface WorldGlobeProps {
   flights: Flight[];
+  /** Theme color used to tint transparent ocean pixels */
   atmosphereColor: string;
 }
 
@@ -35,67 +39,8 @@ interface PointDatum {
   size: number;
 }
 
-/**
- * Build the processed globe material once and cache it at module scope so that
- * remounting the globe (e.g. switching tabs) never re-runs the expensive
- * per-pixel canvas pass on the main thread.
- */
-let cachedMaterial: Promise<Material> | null = null;
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function buildGlobeMaterial(): Promise<Material> {
-  const THREE = await import("three");
-  const img = await loadImage(TEXTURE_URL);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = img.width;
-  canvas.height = img.height;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("2d canvas context unavailable");
-  ctx.drawImage(img, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i],
-      g = data[i + 1],
-      b = data[i + 2];
-    const brightness = (r + g + b) / 3;
-    const isWater = b > r && b > g && brightness < 60;
-    if (isWater) {
-      data[i + 3] = 40;
-    } else {
-      data[i] = 230;
-      data[i + 1] = 230;
-      data[i + 2] = 230;
-      data[i + 3] = 240;
-    }
-  }
-  ctx.putImageData(imageData, 0, 0);
-
-  const tex = new THREE.CanvasTexture(canvas);
-  return new THREE.MeshPhongMaterial({
-    map: tex,
-    transparent: true,
-    opacity: 0.85,
-    specular: new THREE.Color(0xffffff),
-    shininess: 100,
-    side: THREE.DoubleSide,
-  });
-}
-
-function getGlobeMaterial(): Promise<Material> {
-  if (!cachedMaterial) cachedMaterial = buildGlobeMaterial();
-  return cachedMaterial;
+function isReturnToHome(flight: Flight): boolean {
+  return flight.destination_code === HOME_BASE;
 }
 
 function getDimensions() {
@@ -105,6 +50,7 @@ function getDimensions() {
 
 export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
+  const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dimensions, setDimensions] = useState(getDimensions);
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
@@ -116,7 +62,6 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     [],
   );
 
-  // Debounced resize so we don't re-render on every resize event.
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const update = () => {
@@ -130,18 +75,21 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     };
   }, []);
 
-  // Resolve the cached material; guard against setting state after unmount.
   useEffect(() => {
-    let active = true;
-    getGlobeMaterial()
+    let cancelled = false;
+
+    loadGlobeTexture(atmosphereColor)
       .then((mat) => {
-        if (active) setMaterial(mat);
+        if (!cancelled) setMaterial(mat);
       })
-      .catch((err) => console.error("Failed to build globe material:", err));
+      .catch((error) => {
+        console.error("Failed to load globe texture:", error);
+      });
+
     return () => {
-      active = false;
+      cancelled = true;
     };
-  }, []);
+  }, [atmosphereColor]);
 
   const getDistance = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371;
@@ -200,11 +148,22 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       });
 
       setSelectedPoint((prev) =>
-        closestPoint && prev?.code === (closestPoint as PointDatum).code ? null : closestPoint,
+        closestPoint && prev?.code === closestPoint.code ? null : closestPoint,
       );
     },
     [points],
   );
+
+  const resumeAutoRotate = useCallback(() => {
+    if (!globeRef.current) return;
+    const controls = globeRef.current.controls();
+    if (controls) controls.autoRotate = true;
+  }, []);
+
+  const scheduleAutoRotateResume = useCallback(() => {
+    if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+    autoRotateTimerRef.current = setTimeout(resumeAutoRotate, AUTO_ROTATE_RESUME_MS);
+  }, [resumeAutoRotate]);
 
   const handleGlobeReady = useCallback(() => {
     const globe = globeRef.current;
@@ -215,15 +174,29 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
       controls.autoRotateSpeed = 0.3;
       controls.enableZoom = false;
       controls.enablePan = false;
+      controls.minPolarAngle = Math.PI / 2 - TILT_LIMIT;
+      controls.maxPolarAngle = Math.PI / 2 + TILT_LIMIT;
+
+      controls.addEventListener("start", () => {
+        controls.autoRotate = false;
+        if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+      });
+      controls.addEventListener("end", scheduleAutoRotateResume);
     }
     const isMobile = window.innerWidth < 768;
     globe.pointOfView({ lat: 25.2, lng: 55.3, altitude: isMobile ? 4.0 : 3.2 }, 0);
-  }, [prefersReducedMotion]);
+  }, [prefersReducedMotion, scheduleAutoRotateResume]);
+
+  useEffect(() => {
+    return () => {
+      if (autoRotateTimerRef.current) clearTimeout(autoRotateTimerRef.current);
+    };
+  }, []);
 
   const visitCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     flights.forEach((f) => {
-      if (isPast(f)) {
+      if (isPast(f) && !isReturnToHome(f)) {
         counts[f.destination_code] = (counts[f.destination_code] || 0) + 1;
       }
     });
@@ -257,8 +230,16 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
     });
     return s.size;
   }, [flights]);
-  const pastCount = useMemo(() => flights.filter((f) => isPast(f)).length, [flights]);
-  const upcomingCount = flights.length - pastCount;
+
+  const countableFlights = useMemo(
+    () => flights.filter((f) => !isReturnToHome(f)),
+    [flights],
+  );
+  const pastCount = useMemo(
+    () => countableFlights.filter((f) => isPast(f)).length,
+    [countableFlights],
+  );
+  const upcomingCount = countableFlights.length - pastCount;
 
   return (
     <div className="relative w-full h-full">
@@ -297,9 +278,7 @@ export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps
             backgroundColor="rgba(0,0,0,0)"
             globeMaterial={material}
             showGraticules={true}
-            showAtmosphere={true}
-            atmosphereColor={atmosphereColor}
-            atmosphereAltitude={0.25}
+            showAtmosphere={false}
             onGlobeReady={handleGlobeReady}
             onGlobeClick={handleGlobeClick}
             arcsData={arcs}
@@ -368,7 +347,7 @@ function LegendItem({ label, dashed }: { label: string; dashed: boolean }) {
           width: 20,
           borderTopWidth: 2,
           borderTopStyle: dashed ? "dashed" : "solid",
-          borderTopColor: dashed ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,1)",
+          borderTopColor: dashed ? "rgba(255,255,255,0.6)" : "rgba(255, 255, 255, 1)",
         }}
       />
       <span

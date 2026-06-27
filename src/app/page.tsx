@@ -256,7 +256,7 @@ export default function Home() {
               exit="exit"
               className="absolute inset-0 w-full h-full flex flex-col"
             >
-              <WorldGlobe flights={flights} atmosphereColor={countryTheme.atmosphereColor} />
+              <WorldGlobe flights={flights} atmosphereColor={countryTheme.effectiveBg} />
             </motion.div>
           ) : activeTab === "home" ? (
             <motion.div
