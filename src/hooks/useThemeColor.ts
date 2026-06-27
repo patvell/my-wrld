@@ -1,16 +1,18 @@
 "use client";
 
 import { useEffect } from "react";
+import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 
-/**
- * Hook to sync a color with the browser's theme-color meta tag
- * and a CSS variable for global background styling.
- */
+/** Syncs theme color with browser chrome and CSS variables. */
 export function useThemeColor(color: string) {
     useEffect(() => {
         if (typeof document === "undefined") return;
 
-        // 1. Update/Create the <meta name="theme-color"> tag
+        document.documentElement.style.setProperty(
+            "--theme-transition",
+            PLACE_TRANSITION_CSS
+        );
+
         let metaThemeColor = document.querySelector(
             'meta[name="theme-color"]'
         ) as HTMLMetaElement | null;
@@ -22,13 +24,8 @@ export function useThemeColor(color: string) {
         }
         metaThemeColor.content = color;
 
-        // 2. Set dynamic background CSS variable on documentElement
-        // This allows CSS to react to the color change
         document.documentElement.style.setProperty("--dynamic-background", color);
-
-        // 3. Redundantly set body background color for immediate effect/fallbacks
         document.body.style.backgroundColor = color;
         document.documentElement.style.backgroundColor = color;
-
     }, [color]);
 }

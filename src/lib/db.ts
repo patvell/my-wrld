@@ -1,4 +1,5 @@
 import { createClient, type Client } from '@libsql/client';
+import path from 'path';
 import { SEED_FLIGHTS } from '@/lib/seed';
 import { DEFAULT_USER_ID } from '@/lib/config';
 import { normalizeWallClock } from '@/lib/time';
@@ -6,16 +7,19 @@ import { normalizeWallClock } from '@/lib/time';
 let client: Client | null = null;
 let initPromise: Promise<Client> | null = null;
 
-/** Read and validate the database connection config. Throws a clear error if missing. */
-function resolveConfig(): { url: string; authToken: string } {
+function resolveConfig(): { url: string; authToken?: string } {
   const url = process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN;
-  if (!url || !authToken) {
-    throw new Error(
-      'Database not configured: set TURSO_DATABASE_URL and TURSO_AUTH_TOKEN (see .env.example).',
-    );
+
+  if (url && authToken) {
+    return { url, authToken };
   }
-  return { url, authToken };
+
+  const localDbPath = path.join(process.cwd(), 'my-wrld.db');
+  console.warn(
+    `Turso environment variables not found. Using local SQLite database at ${localDbPath}`,
+  );
+  return { url: `file:${localDbPath}` };
 }
 
 async function migrate(db: Client): Promise<void> {
@@ -37,7 +41,6 @@ async function migrate(db: Client): Promise<void> {
     )
   `);
 
-  // Generic TTL cache for AeroAPI responses (keeps us within rate/billing limits).
   await db.execute(`
     CREATE TABLE IF NOT EXISTS aeroapi_cache (
       cache_key TEXT PRIMARY KEY,
@@ -46,7 +49,6 @@ async function migrate(db: Client): Promise<void> {
     )
   `);
 
-  // Seed demo data only when the table is empty.
   const count = await db.execute('SELECT COUNT(*) as c FROM flights');
   if (Number(count.rows[0].c) === 0) {
     for (const f of SEED_FLIGHTS) {
@@ -58,14 +60,11 @@ async function migrate(db: Client): Promise<void> {
     }
   }
 
-  // Backfill ownership for any pre-existing rows (single-tenant default for now).
   await db.execute({
     sql: 'UPDATE flights SET user_id = ? WHERE user_id IS NULL',
     args: [DEFAULT_USER_ID],
   });
 
-  // Normalize any legacy timestamps (offset/seconds) to canonical wall-clock.
-  // Canonical form is exactly 16 chars: "YYYY-MM-DDTHH:mm".
   const legacy = await db.execute(
     'SELECT id, departure_time, arrival_time FROM flights WHERE length(departure_time) > 16 OR length(arrival_time) > 16',
   );
@@ -81,21 +80,18 @@ async function migrate(db: Client): Promise<void> {
   }
 }
 
-/**
- * Returns a ready libSQL client (schema migrated + seeded). Concurrent first
- * calls share a single init via a cached promise to avoid races.
- */
 export async function getDb(): Promise<Client> {
   if (client) return client;
   if (!initPromise) {
     initPromise = (async () => {
       const { url, authToken } = resolveConfig();
-      const db = createClient({ url, authToken });
+      const db = authToken
+        ? createClient({ url, authToken })
+        : createClient({ url });
       await migrate(db);
       client = db;
       return db;
     })().catch((err) => {
-      // Reset so a later request can retry instead of being stuck on a failed init.
       initPromise = null;
       throw err;
     });

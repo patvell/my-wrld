@@ -165,10 +165,6 @@ export const AIRPORTS: Record<string, ExtendedAirport> = {
     HEL: { code: "HEL", city: "Helsinki", country: "Finland", countryIso: "FI", flagColor: "#002F6C", timezone: "Europe/Helsinki", lat: 60.317199707, lng: 24.963300705 },
 };
 
-export const getAirportColor = (code: string): string => {
-    return AIRPORTS[code]?.flagColor || "#D71921"; // Default to Emirates Red if not found
-};
-
 export const getAirportTimezone = (code: string): string => {
     return AIRPORTS[code]?.timezone || "UTC";
 };

@@ -10,23 +10,22 @@
 }
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  --background: #F8F6F3;
+  --foreground: #1a1a1a;
   --emirates-red: #D71A21;
   --dubai-gold: #D4AF37;
-  --dynamic-background: #000000;
+  --dynamic-background: #F8F6F3;
+  --country-chrome: #D71921;
+  --theme-transition: 1.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 html,
 body {
   background-color: var(--dynamic-background);
-  /* Force dynamic background */
   width: 100%;
   overflow-x: hidden;
-  /* Prevent horizontal scroll */
   overscroll-behavior-y: none;
-  /* Prevent bounce effect showing background */
-  transition: background-color 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color var(--theme-transition, 1.6s cubic-bezier(0.16, 1, 0.3, 1));
 }
 
 
@@ -80,5 +79,29 @@ body {
         rgba(255, 255, 255, 0.05) 75%);
     background-size: 200% 100%;
     animation: shimmer 2s infinite linear;
+  }
+
+  @keyframes liquid-drift {
+    0%,
+    100% {
+      transform: translate(0, 0) scale(1);
+    }
+
+    25% {
+      transform: translate(2%, -1.5%) scale(1.04);
+    }
+
+    50% {
+      transform: translate(-1.5%, 2%) scale(0.97);
+    }
+
+    75% {
+      transform: translate(1%, 1%) scale(1.02);
+    }
+  }
+
+  .liquid-blob {
+    animation: liquid-drift 24s ease-in-out infinite;
+    will-change: transform;
   }
 }

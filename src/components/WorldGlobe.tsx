@@ -15,7 +15,7 @@ const TEXTURE_URL = "/earth-blue-marble.jpg";
 
 interface WorldGlobeProps {
   flights: Flight[];
-  primaryColor: string;
+  atmosphereColor: string;
 }
 
 interface ArcDatum {
@@ -103,7 +103,7 @@ function getDimensions() {
   return { width: window.innerWidth, height: window.innerHeight };
 }
 
-export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
+export default function WorldGlobe({ flights, atmosphereColor }: WorldGlobeProps) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const [dimensions, setDimensions] = useState(getDimensions);
   const [material, setMaterial] = useState<Material | null>(null);
@@ -298,7 +298,7 @@ export default function WorldGlobe({ flights, primaryColor }: WorldGlobeProps) {
             globeMaterial={material}
             showGraticules={true}
             showAtmosphere={true}
-            atmosphereColor={primaryColor}
+            atmosphereColor={atmosphereColor}
             atmosphereAltitude={0.25}
             onGlobeReady={handleGlobeReady}
             onGlobeClick={handleGlobeClick}
