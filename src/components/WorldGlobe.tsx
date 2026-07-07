@@ -546,7 +546,7 @@ function StatPill({
   return (
     <div className="flex items-center gap-1.5">
       <span className={cn("text-xs font-bold", dim ? "text-white/50" : "text-white")}>{value}</span>
-      <span className="text-[9px] font-bold tracking-widest uppercase text-white/40">{label}</span>
+      <span className="text-[10px] font-bold tracking-widest uppercase text-white/55">{label}</span>
     </div>
   );
 }

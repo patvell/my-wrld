@@ -1,12 +1,19 @@
-import React, { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { Flight } from "@/types";
-import { Plane, Trash2, Edit, X, Check } from "lucide-react";
+import { Plane, Trash2, Edit } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
 import { AIRLINE_CODE, FLIGHTAWARE_CARRIER, formatFlightDisplay } from "@/lib/config";
 import type { LiveStatus } from "@/lib/aeroMapper";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
+import { spring } from "@/lib/motion";
+
+/** How far the card slides left to reveal the action tray. */
+const SHIFT_PX = 140;
+/** Drag distance/velocity beyond which a release commits the reveal. */
+const DRAG_COMMIT_PX = 60;
+const DRAG_COMMIT_VELOCITY = 400;
 
 interface BoardingPassProps {
     flight: Flight;
@@ -21,6 +28,11 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     const { isFullExperience } = usePerformanceTier();
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [live, setLive] = useState<LiveStatus | null>(null);
+    // Timestamp of the last real horizontal drag. The browser fires click
+    // BEFORE framer's onDragEnd, so a boolean set in onDragEnd is too late —
+    // instead onDrag stamps this live and the click handler ignores anything
+    // within its window.
+    const lastDragAtRef = useRef(0);
     const flightNumber = formatFlightDisplay(flight.flight_number);
 
     const imminent = isImminent(flight);
@@ -50,50 +62,75 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         };
     }, [isActive, flight.id]);
 
+    // Closing the tray always exits the confirm state too. Adjusted during
+    // render (not in an effect) per the derived-state pattern, since the tray
+    // can be closed externally by the parent opening another card.
+    const [prevShifted, setPrevShifted] = useState(isShifted);
+    if (prevShifted !== isShifted) {
+        setPrevShifted(isShifted);
+        if (!isShifted) setIsConfirmingDelete(false);
+    }
+
     const cancelled = Boolean(live?.cancelled);
 
     // Live active state gets a brighter, glowing treatment.
-    const statusColor = cancelled
+    const statusColor = isConfirmingDelete
+        ? "shadow-[0_0_30px_-5px_rgba(239,68,68,0.5)] border-red-500/60"
+        : cancelled
         ? "shadow-[0_0_30px_-5px_rgba(239,68,68,0.5)] border-red-500/60 bg-red-950/30"
         : isActive
         ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.4)] border-white/60 bg-white/10"
         : (imminent ? "shadow-[0_0_30px_-5px_rgba(255,255,255,0.2)] border-white/40 bg-white/5" : "border-white/5");
 
-    const handleDelete = (e: React.MouseEvent) => {
+    const confirmDelete = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (isConfirmingDelete) {
-            onDelete?.(flight.id);
-            setIsConfirmingDelete(false);
-        } else {
-            setIsConfirmingDelete(true);
-        }
+        onDelete?.(flight.id);
+        setIsConfirmingDelete(false);
     };
 
     const handleEdit = (e: React.MouseEvent) => {
         e.stopPropagation();
-        if (isConfirmingDelete) {
-            setIsConfirmingDelete(false);
-        } else {
-            onEdit?.(flight.id);
-        }
+        onEdit?.(flight.id);
+    };
+
+    const requestDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsConfirmingDelete(true);
     };
 
     const activate = () => {
+        // A swipe's release also fires a click; swallow it so the drag intent
+        // (handled in onDragEnd) is the only toggle.
+        if (Date.now() - lastDragAtRef.current < 400) return;
         if (isActive && flightNumber !== "---") {
             window.open(`https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`, '_blank');
             return;
-        }
-        if (isShifted) {
-            setIsConfirmingDelete(false);
         }
         onToggleShift?.();
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === "Escape" && isConfirmingDelete) {
+            e.preventDefault();
+            setIsConfirmingDelete(false);
+            return;
+        }
         if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             activate();
         }
+    };
+
+    const handleDrag = (_: unknown, info: PanInfo) => {
+        if (Math.abs(info.offset.x) > 10) lastDragAtRef.current = Date.now();
+    };
+
+    const handleDragEnd = (_: unknown, info: PanInfo) => {
+        const openIntent = info.offset.x < -DRAG_COMMIT_PX || info.velocity.x < -DRAG_COMMIT_VELOCITY;
+        const closeIntent = info.offset.x > DRAG_COMMIT_PX / 2 || info.velocity.x > DRAG_COMMIT_VELOCITY;
+
+        if (!isShifted && openIntent) onToggleShift?.();
+        else if (isShifted && closeIntent) onToggleShift?.();
     };
 
     const actionLabel = isActive
@@ -105,46 +142,34 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
             {/* Action Buttons Layer (Behind) */}
             <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-2 z-0">
                 <motion.button
-                    initial={{ scale: 0.8, opacity: 0, x: 20 }}
+                    initial={false}
                     animate={{
                         scale: isShifted ? 1 : 0.8,
                         opacity: isShifted ? 1 : 0,
                         x: isShifted ? 0 : 20,
-                        backgroundColor: "rgba(0, 0, 0, 0.4)",
                     }}
-                    transition={{
-                        delay: isShifted ? 0.6 : 0,
-                        type: "spring", stiffness: 400, damping: 35
-                    }}
+                    transition={{ ...spring.smooth, delay: isShifted ? 0.04 : 0 }}
                     onClick={handleEdit}
                     aria-label={`Edit flight ${flight.origin_code} to ${flight.destination_code}`}
                     tabIndex={isShifted ? 0 : -1}
-                    className="w-12 h-12 rounded-full flex items-center justify-center glass-solid text-white hover:bg-white/10 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                    className="w-12 h-12 rounded-full flex items-center justify-center glass-solid text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
-                    {isConfirmingDelete ? <X size={18} /> : <Edit size={18} />}
+                    <Edit size={18} />
                 </motion.button>
                 <motion.button
-                    initial={{ scale: 0.8, opacity: 0, x: 20 }}
+                    initial={false}
                     animate={{
                         scale: isShifted ? 1 : 0.8,
                         opacity: isShifted ? 1 : 0,
                         x: isShifted ? 0 : 20,
-                        backgroundColor: isConfirmingDelete ? "rgba(239, 68, 68, 0.8)" : "rgba(0, 0, 0, 0.4)"
                     }}
-                    transition={{
-                        delay: isShifted ? 0.65 : 0,
-                        type: "spring", stiffness: 400, damping: 35
-                    }}
-                    onClick={handleDelete}
-                    aria-label={isConfirmingDelete ? "Confirm delete flight" : `Delete flight ${flight.origin_code} to ${flight.destination_code}`}
+                    transition={{ ...spring.smooth, delay: isShifted ? 0.08 : 0 }}
+                    onClick={requestDelete}
+                    aria-label={`Delete flight ${flight.origin_code} to ${flight.destination_code}`}
                     tabIndex={isShifted ? 0 : -1}
-                    className={cn(
-                        "w-12 h-12 rounded-full flex items-center justify-center glass-solid text-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
-                        !isConfirmingDelete && "hover:bg-white/10",
-                        isConfirmingDelete && "hover:bg-red-600/90 border-red-400/50"
-                    )}
+                    className="w-12 h-12 rounded-full flex items-center justify-center glass-solid text-white hover:bg-red-600/60 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 >
-                    {isConfirmingDelete ? <Check size={18} /> : <Trash2 size={18} />}
+                    <Trash2 size={18} />
                 </motion.button>
             </div>
 
@@ -153,15 +178,20 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 role="button"
                 tabIndex={0}
                 aria-label={actionLabel}
-                animate={{ x: isShifted ? -140 : 0 }}
-                transition={{
-                    type: "spring", stiffness: 500, damping: 40,
-                    delay: isShifted ? 0 : 0.1
-                }}
+                // Confirming slides the card back over the tray so the full
+                // confirm prompt is visible; Cancel returns it to the tray.
+                animate={{ x: isShifted && !isConfirmingDelete ? -SHIFT_PX : 0 }}
+                transition={spring.snappy}
+                drag="x"
+                dragConstraints={{ left: -SHIFT_PX, right: 0 }}
+                dragElastic={{ left: 0.08, right: 0.05 }}
+                dragMomentum={false}
+                onDrag={handleDrag}
+                onDragEnd={handleDragEnd}
                 onClick={activate}
                 onKeyDown={handleKeyDown}
                 className={cn(
-                    "relative w-full h-full rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-all duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    "relative w-full h-full rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-colors duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                     isFullExperience ? "glass-dark" : "bg-neutral-950/90 border-white/10",
                     statusColor,
                     imminent && "animate-pulse-slow",
@@ -181,7 +211,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.departure_time)}</span>
                             <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.departure_time)}</span>
                             {isActive && live && (live.gate_origin || live.terminal_origin || live.departure_delay_min) && (
-                                <span className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/60 block">
+                                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/70 block">
                                     {live.terminal_origin ? `T${live.terminal_origin}` : null}
                                     {live.terminal_origin && live.gate_origin ? " " : null}
                                     {live.gate_origin ? `Gate ${live.gate_origin}` : null}
@@ -245,7 +275,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             </div>
 
                             {isActive && live && (live.arrival_delay_min || live.gate_destination) && (
-                                <span className="mt-1.5 text-[8px] font-bold uppercase tracking-widest text-white/70">
+                                <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-white/75">
                                     {live.arrival_delay_min && live.arrival_delay_min > 0
                                         ? `Delayed ${live.arrival_delay_min}m`
                                         : live.arrival_delay_min && live.arrival_delay_min < 0
@@ -271,6 +301,45 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     </div>
 
                 </div>
+
+                {/* Delete confirmation takes over the card itself, which reads far
+                    clearer than swapping icon meanings on the tray buttons. */}
+                <AnimatePresence>
+                    {isConfirmingDelete && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.97 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.97 }}
+                            transition={spring.smooth}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setIsConfirmingDelete(false);
+                            }}
+                            className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-red-950/85 backdrop-blur-sm rounded-3xl"
+                        >
+                            <span className="text-xs font-black tracking-[0.2em] uppercase text-white">Delete this journey?</span>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsConfirmingDelete(false);
+                                    }}
+                                    className="px-5 py-2.5 rounded-full border border-white/25 text-white/85 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={confirmDelete}
+                                    className="px-5 py-2.5 rounded-full bg-red-500 text-white text-[10px] font-bold uppercase tracking-widest hover:bg-red-400 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </motion.div>
         </div>
     );

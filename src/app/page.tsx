@@ -16,6 +16,7 @@ import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
 import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 import { motion } from "framer-motion";
+import { TAB_FADE, TAB_SHIFT_PX, cardVariantsFull, cardVariantsLite } from "@/lib/motion";
 import { History, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useThemeColor } from "@/hooks/useThemeColor";
@@ -184,33 +185,15 @@ export default function Home() {
     setActiveOpenCardId((prev) => (prev === id ? null : id));
   };
 
-  const TAB_FADE = { duration: 0.25, ease: "easeInOut" as const };
+  const cardVariants = isFullExperience ? cardVariantsFull : cardVariantsLite;
 
-  const cardVariants = useMemo(
-    () =>
-      isFullExperience
-        ? {
-            hidden: { y: 20, opacity: 0, scale: 0.95 },
-            show: {
-              y: 0,
-              opacity: 1,
-              scale: 1,
-              transition: { type: "spring" as const, stiffness: 150, damping: 20, mass: 0.8 },
-            },
-            exit: {
-              y: -20,
-              opacity: 0,
-              scale: 0.95,
-              transition: { duration: 0.15, ease: "easeIn" as const },
-            },
-          }
-        : {
-            hidden: { y: 12, opacity: 0, filter: "none" },
-            show: { y: 0, opacity: 1, filter: "none", transition: { duration: 0.2, ease: "easeOut" as const } },
-            exit: { y: -12, opacity: 0, filter: "none", transition: { duration: 0.12, ease: "easeIn" as const } },
-          },
-    [isFullExperience],
-  );
+  // Shared-axis tab motion: inactive panels rest offset toward their side of
+  // the tab order (world < home < history), so activating one slides it in
+  // from the direction of travel instead of a flat crossfade.
+  const TAB_ORDER = { world: 0, home: 1, history: 2, settings: 1 } as const;
+  const activeIdx = TAB_ORDER[activeTab];
+  const panelShift = (tab: keyof typeof TAB_ORDER) =>
+    activeTab === tab ? 0 : TAB_ORDER[tab] < activeIdx ? -TAB_SHIFT_PX : TAB_SHIFT_PX;
 
   const homeScrollMask = {
     maskImage:
@@ -245,8 +228,11 @@ export default function Home() {
     >
       <LiquidBackground theme={countryTheme} />
 
+      {/* inert (not just pointer-events) — descendants re-enable hit-testing
+          with pointer-events-auto, and hidden panels must not take focus. */}
       <motion.div
         aria-hidden={activeTab !== "home"}
+        inert={activeTab !== "home"}
         animate={{
           opacity: activeTab === "home" ? 1 : 0,
           y: activeTab === "home" ? 0 : -12,
@@ -268,6 +254,7 @@ export default function Home() {
 
       <motion.div
         aria-hidden={activeTab !== "home"}
+        inert={activeTab !== "home"}
         animate={{
           opacity: activeTab === "home" ? 1 : 0,
           y: activeTab === "home" ? 0 : -8,
@@ -284,6 +271,7 @@ export default function Home() {
 
       <motion.div
         aria-hidden={activeTab !== "history"}
+        inert={activeTab !== "history"}
         animate={{
           opacity: activeTab === "history" ? 1 : 0,
           y: activeTab === "history" ? 0 : -8,
@@ -308,7 +296,8 @@ export default function Home() {
       <div className="flex-1 w-full max-w-full relative overflow-hidden">
         <motion.div
           aria-hidden={activeTab !== "world"}
-          animate={{ opacity: activeTab === "world" ? 1 : 0 }}
+          inert={activeTab !== "world"}
+          animate={{ opacity: activeTab === "world" ? 1 : 0, x: panelShift("world") }}
           transition={TAB_FADE}
           className="absolute inset-0 w-full h-full flex flex-col"
           style={{ pointerEvents: activeTab === "world" ? "auto" : "none" }}
@@ -322,7 +311,8 @@ export default function Home() {
 
         <motion.div
           aria-hidden={activeTab !== "home"}
-          animate={{ opacity: activeTab === "home" ? 1 : 0 }}
+          inert={activeTab !== "home"}
+          animate={{ opacity: activeTab === "home" ? 1 : 0, x: panelShift("home") }}
           transition={TAB_FADE}
           className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[420px] px-4 pb-40 flex flex-col items-center gap-6"
           style={{ ...homeScrollMask, pointerEvents: activeTab === "home" ? "auto" : "none" }}
@@ -360,7 +350,8 @@ export default function Home() {
 
         <motion.div
           aria-hidden={activeTab !== "history"}
-          animate={{ opacity: activeTab === "history" ? 1 : 0 }}
+          inert={activeTab !== "history"}
+          animate={{ opacity: activeTab === "history" ? 1 : 0, x: panelShift("history") }}
           transition={TAB_FADE}
           className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-24 px-4 pb-32 flex flex-col items-center gap-6"
           style={{ ...historyScrollMask, pointerEvents: activeTab === "history" ? "auto" : "none" }}
