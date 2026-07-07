@@ -19,8 +19,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MY WRLD - NINA",
-  description: "MY WRLD - NINA",
+  title: "my wrld",
+  description: "A shared flight diary for two — journeys, time zones, and a world of past trips.",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "my wrld",
+  },
 };
 
 export const viewport: Viewport = {

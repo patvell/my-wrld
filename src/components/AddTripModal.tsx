@@ -11,6 +11,7 @@ import { daySpan } from "@/lib/aeroMapper";
 import { AIRLINE_CODE, formatFlightDigits } from "@/lib/config";
 import { spring } from "@/lib/motion";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
+import AirportField from "@/components/AirportField";
 
 /** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
 function addDays(date: string, n: number): string {
@@ -431,22 +432,17 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 <div className="w-1.5 h-1.5 rounded-full bg-emirates-red" />
                                                 Depart From
                                             </label>
-                                            <div className="relative group">
-                                                <input
-                                                    id="origin-input"
-                                                    type="text"
-                                                    value={origin}
-                                                    onChange={(e) => {
-                                                        setOrigin(e.target.value);
-                                                        if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
-                                                    }}
-                                                    maxLength={3}
-                                                    placeholder="DXB"
-                                                    aria-invalid={Boolean(errors.origin)}
-                                                    className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.origin ? 'border-red-500/50' : 'border-white/10 focus:border-emirates-red/50'}`}
-                                                    required
-                                                />
-                                            </div>
+                                            <AirportField
+                                                id="origin-input"
+                                                value={origin}
+                                                onChange={(v) => {
+                                                    setOrigin(v);
+                                                    if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
+                                                }}
+                                                placeholder="DXB"
+                                                hasError={Boolean(errors.origin)}
+                                                accentClass="focus:border-emirates-red/50"
+                                            />
                                             {errors.origin && (
                                                 <p role="alert" className="text-[11px] font-bold text-red-400 ml-1">
                                                     {errors.origin}
@@ -500,22 +496,17 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 <div className="w-1.5 h-1.5 rounded-full bg-dubai-gold" />
                                                 <span className="hidden md:inline">Arrive At</span> {/* Desktop label order */}
                                             </label>
-                                            <div className="relative group">
-                                                <input
-                                                    id="dest-input"
-                                                    type="text"
-                                                    value={destination}
-                                                    onChange={(e) => {
-                                                        setDestination(e.target.value);
-                                                        if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
-                                                    }}
-                                                    maxLength={3}
-                                                    placeholder="LHR"
-                                                    aria-invalid={Boolean(errors.destination)}
-                                                    className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.destination ? 'border-red-500/50' : 'border-white/10 focus:border-dubai-gold/50'}`}
-                                                    required
-                                                />
-                                            </div>
+                                            <AirportField
+                                                id="dest-input"
+                                                value={destination}
+                                                onChange={(v) => {
+                                                    setDestination(v);
+                                                    if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
+                                                }}
+                                                placeholder="LHR"
+                                                hasError={Boolean(errors.destination)}
+                                                accentClass="focus:border-dubai-gold/50"
+                                            />
                                             {errors.destination && (
                                                 <p role="alert" className="text-[11px] font-bold text-red-400 ml-1 md:text-right md:mr-1">
                                                     {errors.destination}

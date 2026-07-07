@@ -38,7 +38,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                         aria-current={activeTab === tab.id ? "page" : undefined}
                         className={cn(
                             "relative px-3 py-2.5 rounded-full transition-all duration-300 flex items-center gap-1.5",
-                            activeTab === tab.id ? "text-white" : "text-white/40 hover:text-white/60"
+                            activeTab === tab.id ? "text-white" : "text-white/50 hover:text-white/70"
                         )}
                     >
                         {activeTab === tab.id && (
@@ -49,7 +49,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                             />
                         )}
                         <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
-                        <span className="text-[9px] font-bold tracking-wider uppercase">{tab.label}</span>
+                        <span className="text-[10px] font-bold tracking-wider uppercase">{tab.label}</span>
                     </button>
                 ))}
 

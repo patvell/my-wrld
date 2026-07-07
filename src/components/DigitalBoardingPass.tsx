@@ -211,7 +211,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.departure_time)}</span>
                             <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.departure_time)}</span>
                             {isActive && live && (live.gate_origin || live.terminal_origin || live.departure_delay_min) && (
-                                <span className="mt-1 text-[8px] font-bold uppercase tracking-widest text-white/60 block">
+                                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/70 block">
                                     {live.terminal_origin ? `T${live.terminal_origin}` : null}
                                     {live.terminal_origin && live.gate_origin ? " " : null}
                                     {live.gate_origin ? `Gate ${live.gate_origin}` : null}
@@ -275,7 +275,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                             </div>
 
                             {isActive && live && (live.arrival_delay_min || live.gate_destination) && (
-                                <span className="mt-1.5 text-[8px] font-bold uppercase tracking-widest text-white/70">
+                                <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-white/75">
                                     {live.arrival_delay_min && live.arrival_delay_min > 0
                                         ? `Delayed ${live.arrival_delay_min}m`
                                         : live.arrival_delay_min && live.arrival_delay_min < 0

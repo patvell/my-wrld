@@ -174,8 +174,13 @@ export default function GlobalPulse({
 
     return (
         <div
-            className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
-            style={{ transition: `color ${PLACE_TRANSITION_CSS}` }}
+            className="fixed top-0 left-0 right-0 z-50 p-6 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
+            style={{
+                transition: `color ${PLACE_TRANSITION_CSS}`,
+                // 64px in a browser tab (matches the old pt-16); grows under a
+                // notch/Dynamic Island in installed standalone mode.
+                paddingTop: "calc(max(env(safe-area-inset-top, 0px), 40px) + 24px)",
+            }}
         >
             <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
                 <AnimatePresence mode="popLayout">
@@ -295,7 +300,7 @@ export default function GlobalPulse({
                         textColor={useFrostedChrome ? onFrosted : textColor}
                     />
                     <span
-                        className="text-[9px] font-bold tracking-wider"
+                        className="text-[10px] font-bold tracking-wider"
                         style={{
                             color: useFrostedChrome ? "rgba(255,255,255,0.65)" : subTextColor,
                             ...colorTransition,
