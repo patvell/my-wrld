@@ -1,5 +1,6 @@
 import React, { useState, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getTimezoneOffset } from "date-fns-tz";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
 import { getAirportTimezone, AIRPORTS } from "@/data/airports";
@@ -132,9 +133,7 @@ export default function GlobalPulse({
 
     const getTimeDiffText = (tzBig: string, tzSmall: string) => {
         if (!now) return "";
-        const dtBig = new Date(now.toLocaleString("en-US", { timeZone: tzBig }));
-        const dtSmall = new Date(now.toLocaleString("en-US", { timeZone: tzSmall }));
-        const diffMs = dtBig.getTime() - dtSmall.getTime();
+        const diffMs = getTimezoneOffset(tzBig, now) - getTimezoneOffset(tzSmall, now);
         const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 2) / 2;
         if (diffHours === 0) return "SAME TIME";
         const sign = diffHours > 0 ? "+" : "";
@@ -148,7 +147,7 @@ export default function GlobalPulse({
     const mainTimezone = persona === "plane" ? faTimezone : partnerTimezone;
     const altTimezone = persona === "plane" ? partnerTimezone : faTimezone;
 
-    const PersonaToggle = isFullExperience ? motion.div : "div";
+    const PersonaToggle = isFullExperience ? motion.button : "button";
 
     return (
         <div
@@ -248,8 +247,15 @@ export default function GlobalPulse({
                           whileTap: { scale: 0.95 },
                       }
                     : {})}
+                type="button"
                 onClick={onTogglePersona}
-                className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10"
+                aria-pressed={persona === "home"}
+                aria-label={
+                    persona === "plane"
+                        ? `Switch to home view (${partnerCity})`
+                        : `Switch to traveler view (${faCity})`
+                }
+                className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
                 style={{
                     borderColor: useFrostedChrome ? "rgba(255,255,255,0.15)" : subTextColor,
                     transition: `color ${PLACE_TRANSITION_CSS}, border-color ${PLACE_TRANSITION_CSS}`,

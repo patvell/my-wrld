@@ -47,16 +47,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     }
 
     const setClause = entries.map(([k]) => `${k} = ?`).join(', ');
-    const values = [...entries.map(([, v]) => v ?? null), id];
+    const values = [...entries.map(([, v]) => v ?? null), id, userId];
 
     await db.execute({
-      sql: `UPDATE flights SET ${setClause} WHERE id = ?`,
+      sql: `UPDATE flights SET ${setClause} WHERE id = ? AND (user_id = ? OR user_id IS NULL OR user_id = '')`,
       args: values,
     });
 
     const updatedFlight = await db.execute({
-      sql: 'SELECT * FROM flights WHERE id = ?',
-      args: [id],
+      sql: `SELECT * FROM flights WHERE id = ? AND (user_id = ? OR user_id IS NULL OR user_id = '')`,
+      args: [id, userId],
     });
     if (updatedFlight.rows.length === 0) {
       return NextResponse.json({ error: 'Flight not found' }, { status: 404 });
@@ -84,8 +84,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
 
     await db.execute({
-      sql: 'DELETE FROM flights WHERE id = ?',
-      args: [id],
+      sql: `DELETE FROM flights WHERE id = ? AND (user_id = ? OR user_id IS NULL OR user_id = '')`,
+      args: [id, userId],
     });
 
     return NextResponse.json({ success: true });

@@ -252,20 +252,20 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         const newErrors: { origin?: string; destination?: string } = {};
 
         if (!validateAirport(origin)) {
-            newErrors.origin = "Invalid";
+            newErrors.origin = "Unknown airport code";
         }
         if (!validateAirport(destination)) {
-            newErrors.destination = "Invalid";
+            newErrors.destination = "Unknown airport code";
         }
 
         const paddedOriginTime = padTimeInput(originTime);
         const paddedDestTime = padTimeInput(destTime);
         const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
         if (!timeRegex.test(paddedOriginTime)) {
-            newErrors.origin = "Check Time";
+            newErrors.origin = newErrors.origin ?? "Enter a valid time (HH:MM)";
         }
         if (!timeRegex.test(paddedDestTime)) {
-            newErrors.destination = "Check Time";
+            newErrors.destination = newErrors.destination ?? "Enter a valid time (HH:MM)";
         }
 
         if (Object.keys(newErrors).length > 0) {
@@ -415,10 +415,16 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     }}
                                                     maxLength={3}
                                                     placeholder="DXB"
+                                                    aria-invalid={Boolean(errors.origin)}
                                                     className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.origin ? 'border-red-500/50' : 'border-white/10 focus:border-emirates-red/50'}`}
                                                     required
                                                 />
                                             </div>
+                                            {errors.origin && (
+                                                <p role="alert" className="text-[11px] font-bold text-red-400 ml-1">
+                                                    {errors.origin}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Date */}
@@ -478,10 +484,16 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     }}
                                                     maxLength={3}
                                                     placeholder="LHR"
+                                                    aria-invalid={Boolean(errors.destination)}
                                                     className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.destination ? 'border-red-500/50' : 'border-white/10 focus:border-dubai-gold/50'}`}
                                                     required
                                                 />
                                             </div>
+                                            {errors.destination && (
+                                                <p role="alert" className="text-[11px] font-bold text-red-400 ml-1 md:text-right md:mr-1">
+                                                    {errors.destination}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Date */}

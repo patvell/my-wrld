@@ -12,15 +12,18 @@ import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
 import { hexToRgba, isLightBackground } from "@/lib/colors";
+import { HOME_HUB_CODE } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
-const HOME_BASE = "DXB";
+const HOME_BASE = HOME_HUB_CODE;
 const TILT_LIMIT = (35 * Math.PI) / 180;
 const AUTO_ROTATE_RESUME_MS = 3000;
 const DESKTOP_GLOBE_ALTITUDE = 3.2;
 const MOBILE_GLOBE_ALTITUDE = 6.7;
 const MAX_VISIBLE_ROUTES = 20;
 const CLUSTER_THRESHOLD_KM = 350;
+const POV_SYNC_INTERVAL_MS = 150;
+const POV_SYNC_EPSILON_DEG = 0.5;
 const POINT_ALTITUDE = 0.02;
 const ARC_ALTITUDE_AUTO_SCALE = 0.28;
 const DEFAULT_CAMERA_POV = { lat: 25.2, lng: 55.3 };
@@ -39,7 +42,6 @@ interface ArcDatum {
   endLat: number;
   endLng: number;
   color: string;
-  isPast: boolean;
 }
 
 interface PointDatum {
@@ -48,20 +50,19 @@ interface PointDatum {
   code: string;
   color: string;
   size: number;
-  hasPast: boolean;
-  hasUpcoming: boolean;
 }
 
 function isReturnToHome(flight: Flight): boolean {
   return flight.destination_code === HOME_BASE;
 }
 
-function getDimensions(isMobile: boolean) {
+// Dimensions are CSS pixels: react-globe.gl applies devicePixelRatio itself,
+// so scaling here would double-apply DPR and massively overdraw on mobile.
+function getDimensions() {
   if (typeof window === "undefined") return { width: 390, height: 844 };
-  const scale = isMobile ? Math.min(window.devicePixelRatio, 1.5) : window.devicePixelRatio;
   return {
-    width: Math.floor(window.innerWidth * scale),
-    height: Math.floor(window.innerHeight * scale),
+    width: window.innerWidth,
+    height: window.innerHeight,
   };
 }
 
@@ -71,35 +72,19 @@ function getGlobeAltitude(isMobile: boolean) {
 
 function markerStyle(
   chromeColor: string,
-  hasPast: boolean,
-  hasUpcoming: boolean,
   emphasis: "default" | "connected" | "selected",
   isMobile: boolean,
 ) {
   const mult = isMobile ? 2.5 : 1.5;
-  let size: number;
-  let alpha: number;
-
-  if (hasPast && hasUpcoming) {
-    size = 0.462;
-    alpha = 0.95;
-  } else if (hasPast) {
-    size = 0.55;
-    alpha = 1;
-  } else {
-    size = 0.352;
-    alpha = 0.6;
-  }
+  let size = 0.55;
 
   if (emphasis === "connected") {
     size *= 1.12;
-    alpha = Math.min(1, alpha + 0.2);
   } else if (emphasis === "selected") {
     size *= 1.25;
-    alpha = 1;
   }
 
-  return { size: size * mult, color: hexToRgba(chromeColor, alpha) };
+  return { size: size * mult, color: hexToRgba(chromeColor, 1) };
 }
 
 export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: WorldGlobeProps) {
@@ -110,36 +95,44 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
   const autoRotateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const controlsConfiguredRef = useRef(false);
   const configureAttemptsRef = useRef(0);
-  const [dimensions, setDimensions] = useState(() => getDimensions(isMobile));
+  const lastPovSyncRef = useRef(0);
+  const [dimensions, setDimensions] = useState(() => getDimensions());
   const [material, setMaterial] = useState<Material | null>(null);
   const [selectedPoint, setSelectedPoint] = useState<PointDatum | null>(null);
   const [clusterOptions, setClusterOptions] = useState<PointDatum[] | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
   const [cameraPov, setCameraPov] = useState(DEFAULT_CAMERA_POV);
 
+  // Controls fire "change" on every animation frame while auto-rotating;
+  // throttle + epsilon-gate so hemisphere culling doesn't re-render React
+  // (and rebind globe point data) 60 times a second.
   const syncCameraPov = useCallback(() => {
+    const nowTs = performance.now();
+    if (nowTs - lastPovSyncRef.current < POV_SYNC_INTERVAL_MS) return;
     const pov = globeRef.current?.pointOfView();
     if (pov && typeof pov.lat === "number" && typeof pov.lng === "number") {
-      setCameraPov({ lat: pov.lat, lng: pov.lng });
+      lastPovSyncRef.current = nowTs;
+      setCameraPov((prev) =>
+        Math.abs(prev.lat - pov.lat) < POV_SYNC_EPSILON_DEG &&
+        Math.abs(prev.lng - pov.lng) < POV_SYNC_EPSILON_DEG
+          ? prev
+          : { lat: pov.lat, lng: pov.lng },
+      );
     }
   }, []);
-
-  useEffect(() => {
-    setDimensions(getDimensions(isMobile));
-  }, [isMobile]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
     const update = () => {
       clearTimeout(timer);
-      timer = setTimeout(() => setDimensions(getDimensions(isMobile)), 150);
+      timer = setTimeout(() => setDimensions(getDimensions()), 150);
     };
     window.addEventListener("resize", update);
     return () => {
       clearTimeout(timer);
       window.removeEventListener("resize", update);
     };
-  }, [isMobile]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,56 +150,46 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     };
   }, [atmosphereColor, lightBg]);
 
-  const airportStatus = useMemo(() => {
-    const status: Record<string, { past: boolean; upcoming: boolean }> = {};
+  // Only completed travel appears on the globe: upcoming trips contribute
+  // neither markers nor arcs.
+  const pastFlights = useMemo(() => flights.filter((f) => isPast(f)), [flights]);
 
-    flights.forEach((f) => {
+  const visitedCodes = useMemo(() => {
+    const codes = new Set<string>();
+    pastFlights.forEach((f) => {
       if (isReturnToHome(f)) return;
-      const past = isPast(f);
-      [f.origin_code, f.destination_code].forEach((code) => {
-        if (!status[code]) status[code] = { past: false, upcoming: false };
-        if (past) status[code].past = true;
-        else status[code].upcoming = true;
-      });
+      codes.add(f.origin_code);
+      codes.add(f.destination_code);
     });
-
-    return status;
-  }, [flights]);
+    return codes;
+  }, [pastFlights]);
 
   const connectedCodes = useMemo(() => {
     if (!selectedPoint) return new Set<string>();
 
     const codes = new Set<string>([selectedPoint.code]);
-    flights.forEach((f) => {
+    pastFlights.forEach((f) => {
       if (f.origin_code === selectedPoint.code || f.destination_code === selectedPoint.code) {
         codes.add(f.origin_code);
         codes.add(f.destination_code);
       }
     });
     return codes;
-  }, [flights, selectedPoint]);
+  }, [pastFlights, selectedPoint]);
 
   const basePoints = useMemo(() => {
     const pts: PointDatum[] = [];
 
-    Object.entries(airportStatus).forEach(([code, { past, upcoming }]) => {
+    visitedCodes.forEach((code) => {
       const ap = AIRPORTS[code];
       if (!ap || ap.lat === undefined || ap.lng === undefined) return;
 
-      const { size, color } = markerStyle(chromeColor, past, upcoming, "default", isMobile);
-      pts.push({
-        lat: ap.lat,
-        lng: ap.lng,
-        code,
-        color,
-        size,
-        hasPast: past,
-        hasUpcoming: upcoming,
-      });
+      const { size, color } = markerStyle(chromeColor, "default", isMobile);
+      pts.push({ lat: ap.lat, lng: ap.lng, code, color, size });
     });
 
     return pts;
-  }, [airportStatus, chromeColor, isMobile]);
+  }, [visitedCodes, chromeColor, isMobile]);
 
   const displayPoints = useMemo(() => {
     return basePoints.map((p) => {
@@ -220,13 +203,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
 
       if (emphasis === "default") return p;
 
-      const { size, color } = markerStyle(
-        chromeColor,
-        p.hasPast,
-        p.hasUpcoming,
-        emphasis,
-        isMobile,
-      );
+      const { size, color } = markerStyle(chromeColor, emphasis, isMobile);
       return { ...p, size, color };
     });
   }, [basePoints, chromeColor, connectedCodes, selectedPoint, isMobile]);
@@ -396,7 +373,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     if (!selectedPoint) return { arcs: [] as ArcDatum[] };
 
     const hubCode = selectedPoint.code;
-    const matchingFlights = flights
+    const matchingFlights = pastFlights
       .filter(
         (f) => f.origin_code === hubCode || f.destination_code === hubCode,
       )
@@ -414,19 +391,17 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
         return;
       }
 
-      const past = isPast(f);
       routeArcs.push({
         startLat: origin.lat,
         startLng: origin.lng,
         endLat: dest.lat,
         endLng: dest.lng,
-        color: past ? hexToRgba(chromeColor, 0.45) : hexToRgba(chromeColor, 0.3),
-        isPast: past,
+        color: hexToRgba(chromeColor, 0.45),
       });
     });
 
     return { arcs: routeArcs };
-  }, [flights, selectedPoint, chromeColor]);
+  }, [pastFlights, selectedPoint, chromeColor]);
 
   const visibleDisplayPoints = useMemo(
     () =>
@@ -480,6 +455,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
                 key={p.code}
                 type="button"
                 role="option"
+                aria-selected={selectedPoint?.code === p.code}
                 onClick={() => selectAirport(p)}
                 className="px-3 py-1.5 rounded-full text-xs font-black tracking-wider border border-white/20 text-white transition-colors hover:bg-white/10"
               >
@@ -514,10 +490,10 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             arcEndLat={(d: object) => (d as ArcDatum).endLat}
             arcEndLng={(d: object) => (d as ArcDatum).endLng}
             arcColor={(d: object) => (d as ArcDatum).color}
-            arcStroke={(d: object) => ((d as ArcDatum).isPast ? 0.7 : 0.55)}
+            arcStroke={0.7}
             arcAltitudeAutoScale={ARC_ALTITUDE_AUTO_SCALE}
-            arcDashLength={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.4)}
-            arcDashGap={(d: object) => ((d as ArcDatum).isPast ? 0 : 0.25)}
+            arcDashLength={0}
+            arcDashGap={0}
             arcDashAnimateTime={0}
             pointsTransitionDuration={0}
             pointsData={visibleDisplayPoints}

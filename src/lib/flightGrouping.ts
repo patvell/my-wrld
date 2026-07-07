@@ -1,9 +1,13 @@
 import { Flight } from "@/types";
+import { departureInstant } from "@/lib/time";
+import { HOME_HUB_CODE } from "@/lib/config";
 
 export function groupFlightsIntoJourneys(flights: Flight[], sortAscending: boolean = false): Flight[][] {
-  // 1. Sort all flights chronologically (oldest to newest) to detect sequences easily
+  // 1. Sort all flights chronologically (oldest to newest) to detect sequences
+  // easily. Compare true departure instants (wall-clock + airport timezone),
+  // not browser-local Date parsing.
   const chronological = [...flights].sort(
-    (a, b) => new Date(a.departure_time).getTime() - new Date(b.departure_time).getTime()
+    (a, b) => departureInstant(a).getTime() - departureInstant(b).getTime()
   );
 
   const journeys: Flight[][] = [];
@@ -19,12 +23,12 @@ export function groupFlightsIntoJourneys(flights: Flight[], sortAscending: boole
       // Check if they are connected: Origin must match previous Destination
       const isConnectedByLocation = flight.origin_code === lastFlight.destination_code;
 
-      const startedAtDXB = currentJourney[0].origin_code === 'DXB';
-      const endedAtDXB = lastFlight.destination_code === 'DXB';
+      const startedAtHub = currentJourney[0].origin_code === HOME_HUB_CODE;
+      const endedAtHub = lastFlight.destination_code === HOME_HUB_CODE;
 
-      // A journey groups together consecutive flights only if it started at DXB
-      // and hasn't yet returned to DXB.
-      if (startedAtDXB && !endedAtDXB && isConnectedByLocation) {
+      // A journey groups together consecutive flights only if it started at the
+      // home hub and hasn't yet returned to it.
+      if (startedAtHub && !endedAtHub && isConnectedByLocation) {
         currentJourney.push(flight);
       } else {
         journeys.push(currentJourney);
