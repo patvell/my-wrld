@@ -8,16 +8,18 @@ import AddTripModal from "@/components/AddTripModal";
 import LiquidBackground from "@/components/LiquidBackground";
 import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import JourneyList from "@/components/JourneyList";
+import HistoryView from "@/components/HistoryView";
 import { Flight, FlightInput, PersonaMode } from "@/types";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCurrentLocation, isPast } from "@/lib/time";
+import { nextCountdown, formatCountdown } from "@/lib/stats";
 import { PARTNER_CITY, PARTNER_CODE } from "@/lib/config";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
 import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 import { motion } from "framer-motion";
 import { TAB_FADE, TAB_SHIFT_PX, cardVariantsFull, cardVariantsLite } from "@/lib/motion";
-import { History, ArrowUpDown } from "lucide-react";
+import { History, ArrowUpDown, PlaneLanding, PlaneTakeoff } from "lucide-react";
 import { toast } from "sonner";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
@@ -79,23 +81,44 @@ export default function Home() {
   const pastFlights = useMemo(() => flights.filter((f) => isPast(f, now)), [flights, now]);
   const pastJourneys = useMemo(() => groupFlightsIntoJourneys(pastFlights, historySortAsc), [pastFlights, historySortAsc]);
 
+  const countdown = useMemo(() => nextCountdown(flights, now), [flights, now]);
+
   useEffect(() => {
     fetchFlights();
   }, []);
 
-  const fetchFlights = async () => {
-    setLoading(true);
-    setLoadError(false);
+  useEffect(() => {
+    const REFRESH_MS = 5 * 60 * 1000;
+    const timer = setInterval(() => fetchFlights(true), REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchFlights(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // Silent refreshes keep the list current (e.g. a flight the cron marked as
+  // landed moves to History) without flashing the skeleton or an error state
+  // over data we already have.
+  const fetchFlights = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setLoadError(false);
+    }
     try {
       const res = await fetch('/api/flights');
       if (!res.ok) throw new Error('Failed to fetch flights');
       const data = await res.json();
       setFlights(Array.isArray(data) ? (data as Flight[]) : []);
+      if (silent) setLoadError(false);
     } catch (error) {
       console.error('Error fetching flights:', error);
-      setLoadError(true);
+      if (!silent) setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -329,6 +352,24 @@ export default function Home() {
             <LoadErrorState onRetry={fetchFlights} textClass={softTextClass} />
           ) : (
             <>
+              {countdown && (
+                <div className="w-full max-w-sm flex justify-center">
+                  <div
+                    className="glass-dark border border-white/10 rounded-full px-4 py-2 flex items-center gap-2"
+                    role="status"
+                  >
+                    {countdown.kind === "landing-home" ? (
+                      <PlaneLanding size={13} className="text-white/80" aria-hidden />
+                    ) : (
+                      <PlaneTakeoff size={13} className="text-white/80" aria-hidden />
+                    )}
+                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/85">
+                      {countdown.kind === "landing-home" ? "Lands home in" : "Next journey in"}{" "}
+                      {formatCountdown(countdown.target.getTime() - now.getTime())}
+                    </span>
+                  </div>
+                </div>
+              )}
               <JourneyList
                 journeys={upcomingJourneys}
                 now={now}
@@ -368,14 +409,15 @@ export default function Home() {
             <LoadErrorState onRetry={fetchFlights} textClass={softTextClass} />
           ) : (
             <>
-              <JourneyList
+              <HistoryView
                 journeys={pastJourneys}
+                flights={pastFlights}
                 now={now}
                 activeOpenCardId={activeOpenCardId}
                 onToggleCard={handleCardToggle}
                 onDelete={handleDeleteTrip}
                 onEdit={handleEditTrip}
-                keyPrefix="past"
+                isLightBg={isLightBg}
               />
               {pastJourneys.length === 0 && (
                 <div className="mt-20 flex flex-col items-center text-center">

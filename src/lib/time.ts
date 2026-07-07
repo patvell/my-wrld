@@ -74,8 +74,21 @@ export function arrivalInstant(flight: Flight): Date {
   return toInstant(flight.arrival_time, flight.destination_code);
 }
 
-/** A flight is "past" (belongs in History) once it landed more than 2h ago. */
+/**
+ * A flight is "past" (belongs in History) when either:
+ *  - FlightAware (or the user logging a historic trip) marked it completed and
+ *    its departure has actually passed — the departure guard keeps a stale
+ *    completed status from stranding a flight that was edited to a future
+ *    date; or
+ *  - the time fallback: it landed more than 2h ago.
+ */
 export function isPast(flight: Flight, now: Date = new Date()): boolean {
+  if (
+    flight.status === "completed" &&
+    now.getTime() >= departureInstant(flight).getTime()
+  ) {
+    return true;
+  }
   return now.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
 }
 
