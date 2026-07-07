@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { History, Plus, Compass, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
+import { spring } from "@/lib/motion";
 import { preloadGlobeModule } from "@/lib/preloadGlobe";
 
 interface PillMenuProps {
@@ -34,6 +35,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                         onClick={() => onTabChange(tab.id as "home" | "history" | "world")}
                         onMouseEnter={tab.id === "world" ? preloadWorld : undefined}
                         onTouchStart={tab.id === "world" ? preloadWorld : undefined}
+                        aria-current={activeTab === tab.id ? "page" : undefined}
                         className={cn(
                             "relative px-3 py-2.5 rounded-full transition-all duration-300 flex items-center gap-1.5",
                             activeTab === tab.id ? "text-white" : "text-white/40 hover:text-white/60"
@@ -43,7 +45,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                             <motion.div
                                 layoutId="active-tab"
                                 className="absolute inset-0 bg-white/10 rounded-full"
-                                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                                transition={spring.smooth}
                             />
                         )}
                         <tab.icon size={16} strokeWidth={activeTab === tab.id ? 2.5 : 2} />
@@ -56,6 +58,7 @@ export default function PillMenu({ activeTab, onTabChange, onAddClick, chromeCol
                 <motion.button
                     whileTap={{ scale: 0.9 }}
                     onClick={onAddClick}
+                    aria-label="New journey"
                     className="w-10 h-10 rounded-full flex items-center justify-center text-white shadow-lg shadow-black/20 hover:brightness-110"
                     style={{
                         backgroundColor: chromeColor,

@@ -7,6 +7,7 @@ import { getAirportTimezone, AIRPORTS } from "@/data/airports";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { getReadableTextColors } from "@/lib/colors";
 import { PERSONA_SPRING, PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
+import { spring, hapticTap } from "@/lib/motion";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
 interface GlobalPulseProps {
@@ -47,9 +48,11 @@ interface ClockDisplayProps {
     timezone: string;
     textColor: string;
     useFrostedChrome: boolean;
+    /** Roll digits vertically when they change (lock-screen feel). */
+    animateDigits: boolean;
 }
 
-const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useFrostedChrome }: ClockDisplayProps) {
+const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useFrostedChrome, animateDigits }: ClockDisplayProps) {
     const time = now
         ? new Intl.DateTimeFormat("en-US", {
               hour: "2-digit",
@@ -61,7 +64,7 @@ const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useF
 
     return (
         <h1
-            className="text-8xl font-medium tracking-tighter leading-none"
+            className="text-8xl font-medium tracking-tighter leading-none tabular-nums"
             style={{
                 color: textColor,
                 transition: `color ${PLACE_TRANSITION_CSS}`,
@@ -70,7 +73,26 @@ const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useF
                     : "0 2px 12px rgba(0,0,0,0.25)",
             }}
         >
-            {time}
+            {animateDigits
+                ? time.split("").map((char, i) => (
+                      // Each digit gets its own clipped window so changed digits
+                      // roll vertically while unchanged ones hold still.
+                      <span key={i} className="inline-block overflow-hidden align-bottom">
+                          <AnimatePresence mode="popLayout" initial={false}>
+                              <motion.span
+                                  key={char}
+                                  initial={{ y: "0.85em", opacity: 0 }}
+                                  animate={{ y: 0, opacity: 1 }}
+                                  exit={{ y: "-0.85em", opacity: 0 }}
+                                  transition={{ ...spring.smooth, delay: i * 0.03 }}
+                                  className="inline-block"
+                              >
+                                  {char}
+                              </motion.span>
+                          </AnimatePresence>
+                      </span>
+                  ))
+                : time}
         </h1>
     );
 });
@@ -107,8 +129,9 @@ export default function GlobalPulse({
     onTogglePersona,
     isLoading = false,
 }: GlobalPulseProps) {
-    const { isFullExperience } = usePerformanceTier();
+    const { isFullExperience, prefersReducedMotion } = usePerformanceTier();
     const now = useMinuteClock();
+    const animateDigits = isFullExperience && !prefersReducedMotion;
 
     const currentLocationCode = persona === "home" ? partnerCode : faCode;
     const countryTheme = getCountryTheme(currentLocationCode);
@@ -155,7 +178,7 @@ export default function GlobalPulse({
             style={{ transition: `color ${PLACE_TRANSITION_CSS}` }}
         >
             <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
-                <AnimatePresence mode="wait">
+                <AnimatePresence mode="popLayout">
                     <motion.div
                         key={persona}
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -219,6 +242,7 @@ export default function GlobalPulse({
                             timezone={mainTimezone}
                             textColor={textColor}
                             useFrostedChrome={useFrostedChrome}
+                            animateDigits={animateDigits}
                         />
 
                         <span
@@ -248,7 +272,10 @@ export default function GlobalPulse({
                       }
                     : {})}
                 type="button"
-                onClick={onTogglePersona}
+                onClick={() => {
+                    hapticTap();
+                    onTogglePersona();
+                }}
                 aria-pressed={persona === "home"}
                 aria-label={
                     persona === "plane"

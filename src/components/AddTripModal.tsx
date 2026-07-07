@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
 import { X, Calendar, Plane, Clock, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
@@ -9,6 +9,8 @@ import { Flight, FlightInput } from "@/types";
 import { buildWallClock, normalizeWallClock, padTimeInput, toInstant } from "@/lib/time";
 import { daySpan } from "@/lib/aeroMapper";
 import { AIRLINE_CODE, formatFlightDigits } from "@/lib/config";
+import { spring } from "@/lib/motion";
+import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
 /** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
 function addDays(date: string, n: number): string {
@@ -26,6 +28,11 @@ interface AddTripModalProps {
 }
 
 export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = false, flightToEdit }: AddTripModalProps) {
+    const { isMobile } = usePerformanceTier();
+    // Sheet drag-to-dismiss starts only from the header/grab-handle so it
+    // never fights with scrolling the form body.
+    const dragControls = useDragControls();
+
     // Flight Info
     const [flightNum, setFlightNum] = useState("");
 
@@ -246,6 +253,10 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
     const [submitting, setSubmitting] = useState(false);
 
+    // Calendar days the arrival lands after departure — surfaces the overnight
+    // span the date-carry logic already preserves behind the scenes.
+    const arrivalSpanDays = originDate && destDate ? Math.max(0, daySpan(originDate, destDate)) : 0;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -329,15 +340,30 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         initial={{ opacity: 0, y: 100, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
-                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
+                        transition={spring.smooth}
+                        drag={isMobile ? "y" : false}
+                        dragControls={dragControls}
+                        dragListener={false}
+                        dragConstraints={{ top: 0, bottom: 0 }}
+                        dragElastic={{ top: 0, bottom: 0.6 }}
+                        dragMomentum={false}
+                        onDragEnd={(_: unknown, info: PanInfo) => {
+                            if (info.offset.y > 120 || info.velocity.y > 600) onClose();
+                        }}
                         className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border-t border-x md:border border-white/10 rounded-t-[32px] rounded-b-none md:rounded-[32px] z-[70] shadow-2xl flex flex-col max-h-[85vh] md:max-h-[90vh] overflow-hidden"
                     >
                         {/* Decorative background glow - kept in main container so it stays fixed */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />
 
-                        {/* Fixed Header */}
-                        <div className="flex-none z-20 bg-[#0F0F0F] border-b border-white/5 flex items-center justify-between px-5 md:px-8 pt-5 pb-4 md:pt-8 md:pb-6 relative">
-                            {/* Gradient mask for smooth content fade under header if we wanted, but solid buffer is safer for 'fixed' feel */}
+                        {/* Fixed Header (doubles as the sheet's drag handle on mobile) */}
+                        <div
+                            className="flex-none z-20 bg-[#0F0F0F] border-b border-white/5 relative touch-none md:touch-auto"
+                            onPointerDown={(e) => {
+                                if (isMobile) dragControls.start(e);
+                            }}
+                        >
+                            <div className="mx-auto mt-3 mb-1 h-1.5 w-10 rounded-full bg-white/15 md:hidden" aria-hidden />
+                            <div className="flex items-center justify-between px-5 md:px-8 pt-2 pb-4 md:pt-8 md:pb-6">
                             <div className="flex flex-col">
                                 <h2 id="add-trip-title" className="text-xl font-bold text-white tracking-widest uppercase">
                                     {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "NEW JOURNEY")}
@@ -348,13 +374,14 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                     </span>
                                 )}
                             </div>
-                            <button onClick={onClose} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                            <button onClick={onClose} aria-label="Close" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
+                            </div>
                         </div>
 
                         {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar p-5 md:p-8 pt-6 md:pt-8">
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-5 py-6 md:p-8">
                             <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8 pb-4">
                                 {/* 1. Header: Flight Number */}
                                 <div className="flex flex-col items-center justify-center border-b border-white/5 pb-6 md:pb-8">
@@ -397,7 +424,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                     <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/5 -translate-x-1/2 hidden md:block" />
 
                                     {/* LEFT: ORIGIN */}
-                                    <div className="space-y-4 md:space-y-5">
+                                    <div className="space-y-5">
                                         {/* Airport Code */}
                                         <div className="space-y-2">
                                             <label htmlFor="origin-input" className="text-[10px] uppercase tracking-widest text-emirates-red font-bold flex items-center gap-2">
@@ -465,7 +492,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
 
                                     {/* RIGHT: DESTINATION */}
-                                    <div className="space-y-4 md:space-y-5">
+                                    <div className="space-y-5">
                                         {/* Airport Code */}
                                         <div className="space-y-2">
                                             <label htmlFor="dest-input" className="text-[10px] uppercase tracking-widest text-dubai-gold font-bold flex items-center gap-2 justify-start md:justify-end">
@@ -498,7 +525,22 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Date */}
                                         <div className="space-y-1">
-                                            <label htmlFor="dest-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:mr-1 text-left md:text-right block">Date</label>
+                                            <div className="flex items-center gap-2 ml-1 md:ml-0 md:mr-1 md:flex-row-reverse">
+                                                <label htmlFor="dest-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold">Date</label>
+                                                <AnimatePresence>
+                                                    {arrivalSpanDays > 0 && (
+                                                        <motion.span
+                                                            initial={{ opacity: 0, scale: 0.8 }}
+                                                            animate={{ opacity: 1, scale: 1 }}
+                                                            exit={{ opacity: 0, scale: 0.8 }}
+                                                            transition={spring.smooth}
+                                                            className="px-1.5 py-0.5 rounded-full bg-dubai-gold/15 border border-dubai-gold/30 text-dubai-gold text-[9px] font-bold tracking-wider"
+                                                        >
+                                                            +{arrivalSpanDays} DAY{arrivalSpanDays > 1 ? "S" : ""}
+                                                        </motion.span>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
                                             <div className="relative">
                                                 <Calendar size={16} className="absolute left-4 md:right-4 md:left-auto top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
