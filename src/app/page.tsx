@@ -24,11 +24,29 @@ import { cn } from "@/lib/utils";
 
 const WorldGlobe = dynamic(() => import("@/components/WorldGlobe"), { ssr: false });
 
+function LoadErrorState({ onRetry, textClass }: { onRetry: () => void; textClass: string }) {
+  return (
+    <div className="mt-16 flex flex-col items-center text-center gap-4">
+      <p className={cn(textClass, "text-sm font-medium tracking-wide")}>
+        Couldn&apos;t load your journeys.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="px-5 py-2.5 rounded-full glass-dark border border-white/15 text-white text-xs font-bold uppercase tracking-widest hover:bg-black/40 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+
 export default function Home() {
   const { isFullExperience } = usePerformanceTier();
   const [activeTab, setActiveTab] = useState<"home" | "history" | "settings" | "world">("home");
   const [flights, setFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingFlightId, setEditingFlightId] = useState<string | null>(null);
   const [currentPersona, setCurrentPersona] = useState<PersonaMode>("plane");
@@ -65,6 +83,8 @@ export default function Home() {
   }, []);
 
   const fetchFlights = async () => {
+    setLoading(true);
+    setLoadError(false);
     try {
       const res = await fetch('/api/flights');
       if (!res.ok) throw new Error('Failed to fetch flights');
@@ -72,6 +92,7 @@ export default function Home() {
       setFlights(Array.isArray(data) ? (data as Flight[]) : []);
     } catch (error) {
       console.error('Error fetching flights:', error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -314,6 +335,8 @@ export default function Home() {
                 </motion.div>
               ))}
             </div>
+          ) : loadError ? (
+            <LoadErrorState onRetry={fetchFlights} textClass={softTextClass} />
           ) : (
             <>
               <JourneyList
@@ -350,6 +373,8 @@ export default function Home() {
                 </motion.div>
               ))}
             </div>
+          ) : loadError ? (
+            <LoadErrorState onRetry={fetchFlights} textClass={softTextClass} />
           ) : (
             <>
               <JourneyList
