@@ -83,19 +83,38 @@ export default function Home() {
     fetchFlights();
   }, []);
 
-  const fetchFlights = async () => {
-    setLoading(true);
-    setLoadError(false);
+  useEffect(() => {
+    const REFRESH_MS = 5 * 60 * 1000;
+    const timer = setInterval(() => fetchFlights(true), REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") fetchFlights(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, []);
+
+  // Silent refreshes keep the list current (e.g. a flight the cron marked as
+  // landed moves to History) without flashing the skeleton or an error state
+  // over data we already have.
+  const fetchFlights = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setLoadError(false);
+    }
     try {
       const res = await fetch('/api/flights');
       if (!res.ok) throw new Error('Failed to fetch flights');
       const data = await res.json();
       setFlights(Array.isArray(data) ? (data as Flight[]) : []);
+      if (silent) setLoadError(false);
     } catch (error) {
       console.error('Error fetching flights:', error);
-      setLoadError(true);
+      if (!silent) setLoadError(true);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 

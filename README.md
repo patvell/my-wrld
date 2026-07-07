@@ -36,3 +36,7 @@ Set `FLIGHTAWARE_API_KEY` to enable:
 - **Live status:** active boarding passes show real status, progress, delays, and gate from AeroAPI.
 
 The key is read **server-side only** (see `src/lib/aeroapi.ts`); it is never sent to the browser. Calls are TTL-cached in an `aeroapi_cache` table and capped to `max_pages=1` to stay within the AeroAPI Personal tier. Without the key, these features are hidden and the app works normally.
+
+## Deployment extras (optional)
+- **Server-side landing detection:** `vercel.json` schedules `/api/cron/sync-status` every 10 minutes. It syncs flights inside their live window with AeroAPI and marks them `completed`/`cancelled`, so trips move to History when the aircraft actually lands — even with the app closed. Set `CRON_SECRET` to restrict the route (Vercel sends it as a Bearer token automatically).
+- **Access gate:** set `APP_ACCESS_TOKEN` to require a shared secret before anyone can use a deployed instance. Open any URL once with `?key=<token>` to unlock a device (the token is stored in an httpOnly cookie). Unset = no gate (local dev). This is a stopgap until real authentication lands.

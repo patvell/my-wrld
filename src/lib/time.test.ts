@@ -96,11 +96,37 @@ describe("instantToWallClock", () => {
 });
 
 describe("isPast", () => {
-  const flight = makeFlight({ destination_code: "DXB", destination_city: "Dubai" }); // arr 13:00 DXB -> 09:00Z, +2h -> 11:00Z
+  const flight = makeFlight({ destination_code: "DXB", destination_city: "Dubai" }); // dep 10:00 DXB -> 06:00Z; arr 13:00 DXB -> 09:00Z, +2h -> 11:00Z
 
   it("is past only after 2h past arrival", () => {
     expect(isPast(flight, new Date("2026-01-30T10:00:00Z"))).toBe(false); // 1h after arrival
     expect(isPast(flight, new Date("2026-01-30T12:00:00Z"))).toBe(true); // 3h after arrival
+  });
+
+  it("moves to History as soon as the flight is confirmed completed after departure", () => {
+    const landedEarly = makeFlight({
+      destination_code: "DXB",
+      destination_city: "Dubai",
+      status: "completed",
+    });
+    // Mid-window (30min before scheduled arrival) but FlightAware says landed.
+    expect(isPast(landedEarly, new Date("2026-01-30T08:30:00Z"))).toBe(true);
+  });
+
+  it("ignores a stale completed status when departure is still in the future", () => {
+    const staleCompleted = makeFlight({
+      destination_code: "DXB",
+      destination_city: "Dubai",
+      status: "completed",
+    });
+    // An hour before departure (06:00Z): a completed status can't be real yet.
+    expect(isPast(staleCompleted, new Date("2026-01-30T05:00:00Z"))).toBe(false);
+  });
+
+  it("still uses the time fallback for scheduled flights without live data", () => {
+    const scheduled = makeFlight({ destination_code: "DXB", destination_city: "Dubai", status: "scheduled" });
+    expect(isPast(scheduled, new Date("2026-01-30T10:00:00Z"))).toBe(false);
+    expect(isPast(scheduled, new Date("2026-01-30T12:00:00Z"))).toBe(true);
   });
 });
 
