@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { motion } from "framer-motion";
+import { ChevronDown } from "lucide-react";
 import type { Material } from "three";
 import type { GlobeMethods } from "react-globe.gl";
 import { Flight } from "@/types";
@@ -13,6 +14,8 @@ import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
 import { hexToRgba, isLightBackground } from "@/lib/colors";
 import { HOME_HUB_CODE } from "@/lib/config";
+import { computeTravelStats, formatDistanceKm } from "@/lib/stats";
+import WorldStatsSheet, { type DestinationEntry } from "@/components/WorldStatsSheet";
 import { cn } from "@/lib/utils";
 
 const HOME_BASE = HOME_HUB_CODE;
@@ -102,6 +105,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
   const [clusterOptions, setClusterOptions] = useState<PointDatum[] | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
   const [cameraPov, setCameraPov] = useState(DEFAULT_CAMERA_POV);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   // Controls fire "change" on every animation frame while auto-rotating;
   // throttle + epsilon-gate so hemisphere culling doesn't re-render React
@@ -411,35 +415,40 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     [displayPoints, cameraPov],
   );
 
-  const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
+  const travelStats = useMemo(() => computeTravelStats(pastFlights), [pastFlights]);
 
-  const countableFlights = useMemo(
-    () => flights.filter((f) => !isReturnToHome(f)),
-    [flights],
-  );
-  const pastCount = useMemo(
-    () => countableFlights.filter((f) => isPast(f)).length,
-    [countableFlights],
-  );
-  const upcomingCount = countableFlights.length - pastCount;
+  const destinations = useMemo<DestinationEntry[]>(() => {
+    return [...visitedCodes]
+      .filter((code) => code !== HOME_BASE)
+      .map((code) => ({
+        code,
+        city: AIRPORTS[code]?.city ?? code,
+        country: AIRPORTS[code]?.country ?? "",
+        visits: visitCounts[code] || 0,
+      }))
+      .sort((a, b) => b.visits - a.visits || a.code.localeCompare(b.code));
+  }, [visitedCodes, visitCounts]);
 
   return (
     <div className="relative w-full h-full">
       <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
-        <div
-          className={cn("flex items-center gap-4 px-5 py-2 border", NAV_PILL_CLASS)}
-          aria-label={`${uniqueAirportCount} airports, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
-        >
-          <StatPill value={uniqueAirportCount} label="Airports" />
-          <div className="w-[1px] h-3 bg-white/10" />
-          <StatPill value={pastCount} label="Past" />
-          {upcomingCount > 0 && (
-            <>
-              <div className="w-[1px] h-3 bg-white/10" />
-              <StatPill value={upcomingCount} label="Upcoming" dim />
-            </>
+        <button
+          type="button"
+          onClick={() => setStatsOpen(true)}
+          aria-haspopup="dialog"
+          aria-label={`Open travel stats: ${travelStats.countries} countries, ${travelStats.cities} cities, ${travelStats.flights} flights, ${formatDistanceKm(travelStats.distanceKm)} flown`}
+          className={cn(
+            "pointer-events-auto flex items-center gap-4 px-5 py-2 border transition-colors hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+            NAV_PILL_CLASS,
           )}
-        </div>
+        >
+          <StatPill value={travelStats.countries} label="Countries" />
+          <div className="w-[1px] h-3 bg-white/10" />
+          <StatPill value={travelStats.cities} label="Cities" />
+          <div className="w-[1px] h-3 bg-white/10" />
+          <StatPill value={travelStats.flights} label="Flights" />
+          <ChevronDown size={13} strokeWidth={3} className="text-white/50 -mr-1" aria-hidden />
+        </button>
 
         {clusterOptions && clusterOptions.length > 1 && (
           <div
@@ -492,9 +501,11 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             arcColor={(d: object) => (d as ArcDatum).color}
             arcStroke={0.7}
             arcAltitudeAutoScale={ARC_ALTITUDE_AUTO_SCALE}
-            arcDashLength={0}
-            arcDashGap={0}
-            arcDashAnimateTime={0}
+            // Selected-hub routes flow along the arc; solid lines under
+            // reduced motion.
+            arcDashLength={prefersReducedMotion ? 0 : 0.45}
+            arcDashGap={prefersReducedMotion ? 0 : 0.18}
+            arcDashAnimateTime={prefersReducedMotion ? 0 : 1400}
             pointsTransitionDuration={0}
             pointsData={visibleDisplayPoints}
             pointColor={(d: object) => (d as PointDatum).color}
@@ -530,6 +541,13 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
           />
         )}
       </motion.div>
+
+      <WorldStatsSheet
+        open={statsOpen}
+        onClose={() => setStatsOpen(false)}
+        stats={travelStats}
+        destinations={destinations}
+      />
     </div>
   );
 }
@@ -539,7 +557,7 @@ function StatPill({
   label,
   dim = false,
 }: {
-  value: number;
+  value: number | string;
   label: string;
   dim?: boolean;
 }) {
