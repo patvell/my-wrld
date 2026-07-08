@@ -23,7 +23,6 @@ const TILT_LIMIT = (35 * Math.PI) / 180;
 const AUTO_ROTATE_RESUME_MS = 3000;
 const DESKTOP_GLOBE_ALTITUDE = 3.2;
 const MOBILE_GLOBE_ALTITUDE = 6.7;
-const MAX_VISIBLE_ROUTES = 20;
 const CLUSTER_THRESHOLD_KM = 350;
 const POV_SYNC_INTERVAL_MS = 150;
 const POV_SYNC_EPSILON_DEG = 0.5;
@@ -377,16 +376,20 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     if (!selectedPoint) return { arcs: [] as ArcDatum[] };
 
     const hubCode = selectedPoint.code;
-    const matchingFlights = pastFlights
-      .filter(
-        (f) => f.origin_code === hubCode || f.destination_code === hubCode,
-      )
-      .sort((a, b) => b.departure_time.localeCompare(a.departure_time))
-      .slice(0, MAX_VISIBLE_ROUTES);
+    const matchingFlights = pastFlights.filter(
+      (f) => f.origin_code === hubCode || f.destination_code === hubCode,
+    );
 
+    // One arc per unique route (A→B and B→A share an arc), so every journey
+    // flown from a hub is wired without stacking duplicates.
+    const seenRoutes = new Set<string>();
     const routeArcs: ArcDatum[] = [];
 
     matchingFlights.forEach((f) => {
+      const routeKey = [f.origin_code, f.destination_code].sort().join("|");
+      if (seenRoutes.has(routeKey)) return;
+      seenRoutes.add(routeKey);
+
       const origin = AIRPORTS[f.origin_code];
       const dest = AIRPORTS[f.destination_code];
       if (!origin || !dest) return;
@@ -501,11 +504,8 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             arcColor={(d: object) => (d as ArcDatum).color}
             arcStroke={0.7}
             arcAltitudeAutoScale={ARC_ALTITUDE_AUTO_SCALE}
-            // Selected-hub routes flow along the arc; solid lines under
-            // reduced motion.
-            arcDashLength={prefersReducedMotion ? 0 : 0.45}
-            arcDashGap={prefersReducedMotion ? 0 : 0.18}
-            arcDashAnimateTime={prefersReducedMotion ? 0 : 1400}
+            // Selected-hub routes render as solid, static wires.
+            arcsTransitionDuration={0}
             pointsTransitionDuration={0}
             pointsData={visibleDisplayPoints}
             pointColor={(d: object) => (d as PointDatum).color}

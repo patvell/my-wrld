@@ -174,7 +174,7 @@ export default function GlobalPulse({
 
     return (
         <div
-            className="fixed top-0 left-0 right-0 z-50 p-6 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
+            className="fixed top-0 left-0 right-0 z-50 p-6 pb-12 flex flex-col items-center gap-6 overflow-hidden pointer-events-none"
             style={{
                 transition: `color ${PLACE_TRANSITION_CSS}`,
                 // 64px in a browser tab (matches the old pt-16); grows under a
@@ -182,7 +182,10 @@ export default function GlobalPulse({
                 paddingTop: "calc(max(env(safe-area-inset-top, 0px), 40px) + 24px)",
             }}
         >
-            <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
+            <div className="flex flex-col items-center justify-center w-full max-w-lg pointer-events-auto">
+                {/* Only the perspective label + location crossfade on toggle;
+                    the clock and date below stay mounted so the digits roll
+                    to the new timezone instead of two clocks overlapping. */}
                 <AnimatePresence mode="popLayout">
                     <motion.div
                         key={persona}
@@ -241,18 +244,29 @@ export default function GlobalPulse({
                                 </>
                             )}
                         </div>
+                    </motion.div>
+                </AnimatePresence>
 
-                        <ClockDisplay
-                            now={now}
-                            timezone={mainTimezone}
-                            textColor={textColor}
-                            useFrostedChrome={useFrostedChrome}
-                            animateDigits={animateDigits}
-                        />
+                <ClockDisplay
+                    now={now}
+                    timezone={mainTimezone}
+                    textColor={textColor}
+                    useFrostedChrome={useFrostedChrome}
+                    animateDigits={animateDigits}
+                />
 
-                        <span
-                            className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
-                            style={{ color: subTextColor, ...colorTransition }}
+                <span
+                    className="text-xs font-bold uppercase tracking-widest mt-4 h-4 flex items-center"
+                    style={{ color: subTextColor, ...colorTransition }}
+                >
+                    <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.span
+                            key={persona}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={PERSONA_SPRING}
+                            className="flex items-center gap-2"
                         >
                             {now ? (
                                 <>
@@ -263,9 +277,9 @@ export default function GlobalPulse({
                             ) : (
                                 "..."
                             )}
-                        </span>
-                    </motion.div>
-                </AnimatePresence>
+                        </motion.span>
+                    </AnimatePresence>
+                </span>
             </div>
 
             <PersonaToggle
