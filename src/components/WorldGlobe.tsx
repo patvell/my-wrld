@@ -434,7 +434,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
+      <div className="absolute top-[max(calc(env(safe-area-inset-top,0px)+8px),1.5rem)] left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
         <button
           type="button"
           onClick={() => setStatsOpen(true)}
