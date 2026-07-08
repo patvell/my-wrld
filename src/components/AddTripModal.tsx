@@ -452,7 +452,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Date */}
                                         <div className="space-y-1">
-                                            <label htmlFor="origin-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
+                                            <label htmlFor="origin-date" className="h-5 flex items-center text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
                                             <div className="relative">
                                                 <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
@@ -468,7 +468,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Time */}
                                         <div className="space-y-1">
-                                            <label htmlFor="origin-time" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
+                                            <label htmlFor="origin-time" className="h-5 flex items-center text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
                                             <div className="relative">
                                                 <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
@@ -516,7 +516,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Date */}
                                         <div className="space-y-1">
-                                            <div className="flex items-center gap-2 ml-1 md:ml-0 md:mr-1 md:flex-row-reverse">
+                                            <div className="h-5 flex items-center gap-2 ml-1 md:ml-0 md:mr-1 md:flex-row-reverse">
                                                 <label htmlFor="dest-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold">Date</label>
                                                 <AnimatePresence>
                                                     {arrivalSpanDays > 0 && (
@@ -548,7 +548,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Time */}
                                         <div className="space-y-1">
-                                            <label htmlFor="dest-time" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:mr-1 text-left md:text-right block">Time</label>
+                                            <label htmlFor="dest-time" className="h-5 flex items-center md:justify-end text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:ml-0 md:mr-1">Time</label>
                                             <div className="relative">
                                                 <Clock size={16} className="absolute left-4 md:right-4 md:left-auto top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input

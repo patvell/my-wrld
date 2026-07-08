@@ -88,10 +88,20 @@ describe("groupJourneysByMonth", () => {
 describe("nextCountdown", () => {
   const now = new Date("2026-01-29T00:00:00Z");
 
-  it("counts down to the next arrival home when one is upcoming", () => {
-    const cd = nextCountdown([makeFlight({ status: "scheduled" }), { ...inbound, status: "scheduled" }], now);
+  it("counts down to the arrival home when it is the next event", () => {
+    // Inbound is in the air (departed BLR 04:30Z, lands DXB 09:00Z); the
+    // landing home is the next event.
+    const inAir = new Date("2026-01-31T05:00:00Z");
+    const cd = nextCountdown([makeFlight({ status: "scheduled" }), { ...inbound, status: "scheduled" }], inAir);
     expect(cd?.kind).toBe("landing-home");
     expect(cd?.code).toBe("DXB");
+  });
+
+  it("prefers a sooner departure over a later arrival home", () => {
+    // Both legs booked: outbound departs Jan 30, inbound lands home Jan 31.
+    const cd = nextCountdown([makeFlight({ status: "scheduled" }), { ...inbound, status: "scheduled" }], now);
+    expect(cd?.kind).toBe("next-journey");
+    expect(cd?.code).toBe("BLR");
   });
 
   it("counts down to the next departure when no home arrival is booked", () => {

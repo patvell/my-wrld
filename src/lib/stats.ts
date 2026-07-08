@@ -146,9 +146,11 @@ export interface Countdown {
 }
 
 /**
- * The next moment worth counting down to:
+ * The next moment worth counting down to — always the chronologically
+ * nearest upcoming event:
  *  - an upcoming/active flight arriving at the home hub → "lands home"
- *  - otherwise the next future departure → "next journey"
+ *  - the next future departure → "next journey"
+ * Whichever instant comes first wins (home arrival on a tie).
  */
 export function nextCountdown(flights: Flight[], now: Date = new Date()): Countdown | null {
   const upcoming = flights.filter((f) => !isPast(f, now));
@@ -156,15 +158,19 @@ export function nextCountdown(flights: Flight[], now: Date = new Date()): Countd
   const homeArrival = upcoming
     .filter((f) => f.destination_code === HOME_HUB_CODE && arrivalInstant(f).getTime() > now.getTime())
     .sort((a, b) => arrivalInstant(a).getTime() - arrivalInstant(b).getTime())[0];
-  if (homeArrival) {
-    return { kind: "landing-home", target: arrivalInstant(homeArrival), code: homeArrival.destination_code };
-  }
 
   const nextDeparture = upcoming
     .filter((f) => departureInstant(f).getTime() > now.getTime())
     .sort((a, b) => departureInstant(a).getTime() - departureInstant(b).getTime())[0];
-  if (nextDeparture) {
-    return { kind: "next-journey", target: departureInstant(nextDeparture), code: nextDeparture.destination_code };
+
+  const arrivalAt = homeArrival ? arrivalInstant(homeArrival) : null;
+  const departureAt = nextDeparture ? departureInstant(nextDeparture) : null;
+
+  if (homeArrival && arrivalAt && (!departureAt || arrivalAt.getTime() <= departureAt.getTime())) {
+    return { kind: "landing-home", target: arrivalAt, code: homeArrival.destination_code };
+  }
+  if (nextDeparture && departureAt) {
+    return { kind: "next-journey", target: departureAt, code: nextDeparture.destination_code };
   }
 
   return null;
