@@ -283,7 +283,7 @@ export default function Home() {
           y: activeTab === "home" ? 0 : -8,
         }}
         transition={TAB_FADE}
-        className="absolute top-[340px] left-0 right-0 z-40 flex justify-center pointer-events-none"
+        className="absolute top-[calc(max(env(safe-area-inset-top,0px),40px)+300px)] left-0 right-0 z-40 flex justify-center pointer-events-none"
         style={{ pointerEvents: activeTab === "home" ? "auto" : "none" }}
       >
         <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 pointer-events-auto">
@@ -300,7 +300,7 @@ export default function Home() {
           y: activeTab === "history" ? 0 : -8,
         }}
         transition={TAB_FADE}
-        className="absolute top-8 left-0 right-0 z-40 flex justify-center pointer-events-none"
+        className="absolute top-[max(calc(env(safe-area-inset-top,0px)+8px),2rem)] left-0 right-0 z-40 flex justify-center pointer-events-none"
         style={{ pointerEvents: activeTab === "history" ? "auto" : "none" }}
       >
         <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent pointer-events-auto">
@@ -337,7 +337,7 @@ export default function Home() {
           inert={activeTab !== "home"}
           animate={{ opacity: activeTab === "home" ? 1 : 0, x: panelShift("home") }}
           transition={TAB_FADE}
-          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[420px] px-4 pb-40 flex flex-col items-center gap-6"
+          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[calc(max(env(safe-area-inset-top,0px),40px)+380px)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+10rem)] flex flex-col items-center gap-6"
           style={{ ...homeScrollMask, pointerEvents: activeTab === "home" ? "auto" : "none" }}
         >
           {loading ? (
@@ -394,7 +394,7 @@ export default function Home() {
           inert={activeTab !== "history"}
           animate={{ opacity: activeTab === "history" ? 1 : 0, x: panelShift("history") }}
           transition={TAB_FADE}
-          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-24 px-4 pb-32 flex flex-col items-center gap-6"
+          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[max(calc(env(safe-area-inset-top,0px)+72px),6rem)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+8rem)] flex flex-col items-center gap-6"
           style={{ ...historyScrollMask, pointerEvents: activeTab === "history" ? "auto" : "none" }}
         >
           {loading ? (
