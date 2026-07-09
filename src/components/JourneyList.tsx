@@ -17,6 +17,8 @@ interface JourneyListProps {
   onEdit: (id: string) => void;
   /** Whether to surface the live-tracking ("active") state on cards. */
   showLiveStatus?: boolean;
+  /** Dim every journey after the first so the next one reads as the focus. */
+  emphasizeFirst?: boolean;
   keyPrefix: string;
 }
 
@@ -28,6 +30,7 @@ export default function JourneyList({
   onDelete,
   onEdit,
   showLiveStatus = false,
+  emphasizeFirst = false,
   keyPrefix,
 }: JourneyListProps) {
   const { isFullExperience } = usePerformanceTier();
@@ -56,9 +59,13 @@ export default function JourneyList({
             exit="exit"
             className="w-full max-w-sm flex flex-col gap-0"
           >
-            {/* AnimatePresence tracks direct keyed motion children, so cards and
-                connectors are emitted as flat siblings rather than fragments. */}
-            <AnimatePresence mode="popLayout" initial={false}>
+            {/* The top journey is the hero; later ones sit back a little. The
+                opacity lives on an inner wrapper so it doesn't fight the keyed
+                motion.div's animated opacity. */}
+            <div className={cn("flex flex-col gap-0 transition-opacity", emphasizeFirst && jIdx > 0 && "opacity-75")}>
+              {/* AnimatePresence tracks direct keyed motion children, so cards and
+                  connectors are emitted as flat siblings rather than fragments. */}
+              <AnimatePresence mode="popLayout" initial={false}>
               {journey.flatMap((flight, fIdx) => {
                 const nextFlight = journey[fIdx + 1];
                 const layover = nextFlight ? isLayoverBetween(flight, nextFlight) : false;
@@ -120,7 +127,8 @@ export default function JourneyList({
 
                 return items;
               })}
-            </AnimatePresence>
+              </AnimatePresence>
+            </div>
           </motion.div>
         ))}
       </AnimatePresence>

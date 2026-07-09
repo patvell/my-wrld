@@ -12,14 +12,13 @@ import HistoryView from "@/components/HistoryView";
 import { Flight, FlightInput, PersonaMode } from "@/types";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
 import { getCurrentLocation, isPast } from "@/lib/time";
-import { nextCountdown, formatCountdown } from "@/lib/stats";
 import { PARTNER_CITY, PARTNER_CODE } from "@/lib/config";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
 import { PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 import { motion } from "framer-motion";
 import { TAB_FADE, TAB_SHIFT_PX, cardVariantsFull, cardVariantsLite } from "@/lib/motion";
-import { History, ArrowUpDown, PlaneLanding, PlaneTakeoff } from "lucide-react";
+import { History, ArrowUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { useThemeColor } from "@/hooks/useThemeColor";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
@@ -80,8 +79,6 @@ export default function Home() {
 
   const pastFlights = useMemo(() => flights.filter((f) => isPast(f, now)), [flights, now]);
   const pastJourneys = useMemo(() => groupFlightsIntoJourneys(pastFlights, historySortAsc), [pastFlights, historySortAsc]);
-
-  const countdown = useMemo(() => nextCountdown(flights, now), [flights, now]);
 
   useEffect(() => {
     fetchFlights();
@@ -352,24 +349,6 @@ export default function Home() {
             <LoadErrorState onRetry={fetchFlights} textClass={softTextClass} />
           ) : (
             <>
-              {countdown && (
-                <div className="w-full max-w-sm flex justify-center">
-                  <div
-                    className="glass-dark border border-white/10 rounded-full px-4 py-2 flex items-center gap-2"
-                    role="status"
-                  >
-                    {countdown.kind === "landing-home" ? (
-                      <PlaneLanding size={13} className="text-white/80" aria-hidden />
-                    ) : (
-                      <PlaneTakeoff size={13} className="text-white/80" aria-hidden />
-                    )}
-                    <span className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/85">
-                      {countdown.kind === "landing-home" ? "Lands home in" : "Next journey in"}{" "}
-                      {formatCountdown(countdown.target.getTime() - now.getTime())}
-                    </span>
-                  </div>
-                </div>
-              )}
               <JourneyList
                 journeys={upcomingJourneys}
                 now={now}
@@ -378,6 +357,7 @@ export default function Home() {
                 onDelete={handleDeleteTrip}
                 onEdit={handleEditTrip}
                 showLiveStatus
+                emphasizeFirst
                 keyPrefix="upcoming"
               />
               {upcomingJourneys.length === 0 && (

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { Flight } from "@/types";
-import { Plane, Trash2, Edit } from "lucide-react";
+import { Plane, Trash2, Edit, ChevronDown, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
 import { AIRLINE_CODE, FLIGHTAWARE_CARRIER, formatFlightDisplay } from "@/lib/config";
-import type { LiveStatus } from "@/lib/aeroMapper";
+import { primaryLiveStatus, type LiveStatus } from "@/lib/aeroMapper";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import { spring } from "@/lib/motion";
 
@@ -28,6 +28,9 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     const { isFullExperience } = usePerformanceTier();
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [live, setLive] = useState<LiveStatus | null>(null);
+    // Live details (gates, delays, tracking link) stay tucked behind a tap so
+    // the resting active card reads like the plain pass.
+    const [detailsOpen, setDetailsOpen] = useState(false);
     // Timestamp of the last real horizontal drag. The browser fires click
     // BEFORE framer's onDragEnd, so a boolean set in onDragEnd is too late —
     // instead onDrag stamps this live and the click handler ignores anything
@@ -102,8 +105,8 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         // A swipe's release also fires a click; swallow it so the drag intent
         // (handled in onDragEnd) is the only toggle.
         if (Date.now() - lastDragAtRef.current < 400) return;
-        if (isActive && flightNumber !== "---") {
-            window.open(`https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`, '_blank');
+        if (isActive) {
+            setDetailsOpen((open) => !open);
             return;
         }
         onToggleShift?.();
@@ -133,12 +136,19 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         else if (isShifted && closeIntent) onToggleShift?.();
     };
 
+    // Single place the delay is stated: prefer the arrival delay (what matters
+    // once airborne), fall back to the departure delay.
+    const delayMin = live?.arrival_delay_min ?? live?.departure_delay_min ?? null;
+
     const actionLabel = isActive
-        ? `Open live tracking for flight ${AIRLINE_CODE}${flightNumber}`
+        ? `${detailsOpen ? "Hide" : "Show"} live details for flight ${AIRLINE_CODE}${flightNumber}`
         : `${isShifted ? "Hide" : "Show"} actions for ${flight.origin_code} to ${flight.destination_code}`;
 
     return (
-        <div className="relative w-full max-w-sm group h-44">
+        // Height is content-driven: the pass body is a fixed h-44 (identical to
+        // the old fixed-height card) and the live-details panel extends the
+        // card downward when open.
+        <div className="relative w-full max-w-sm group">
             {/* Action Buttons Layer (Behind) */}
             <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-2 z-0">
                 <motion.button
@@ -190,8 +200,9 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 onDragEnd={handleDragEnd}
                 onClick={activate}
                 onKeyDown={handleKeyDown}
+                aria-expanded={isActive ? detailsOpen : isShifted}
                 className={cn(
-                    "relative w-full h-full rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-colors duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    "relative w-full rounded-3xl overflow-hidden cursor-pointer selection:bg-transparent border transition-colors duration-500 z-10 flex flex-col focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
                     isFullExperience ? "glass-dark" : "bg-neutral-950/90 border-white/10",
                     statusColor,
                     imminent && "animate-pulse-slow",
@@ -199,7 +210,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 )}
                 whileTap={{ scale: 0.98 }}
             >
-                <div className={cn("flex-1 p-5 flex flex-row items-center justify-between relative", isFullExperience ? "bg-black/55" : "bg-black/75")}>
+                <div className={cn("h-44 p-5 flex flex-row items-center justify-between relative", isFullExperience ? "bg-black/55" : "bg-black/75")}>
 
                     {/* LEFT: Origin */}
                     <div className="flex flex-col items-start justify-between h-full z-10 w-1/3 py-1">
@@ -210,19 +221,6 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.departure_time)}</span>
                             <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.departure_time)}</span>
-                            {isActive && live && (live.gate_origin || live.terminal_origin || live.departure_delay_min) && (
-                                <span className="mt-1 text-[9px] font-bold uppercase tracking-widest text-white/70 block">
-                                    {live.terminal_origin ? `T${live.terminal_origin}` : null}
-                                    {live.terminal_origin && live.gate_origin ? " " : null}
-                                    {live.gate_origin ? `Gate ${live.gate_origin}` : null}
-                                    {(live.terminal_origin || live.gate_origin) && live.departure_delay_min ? " | " : null}
-                                    {live.departure_delay_min && live.departure_delay_min > 0
-                                        ? `Delayed ${live.departure_delay_min}m`
-                                        : live.departure_delay_min && live.departure_delay_min < 0
-                                            ? `Early ${Math.abs(live.departure_delay_min)}m`
-                                            : null}
-                                </span>
-                            )}
                         </div>
                     </div>
 
@@ -242,8 +240,24 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                             "text-[10px] font-black tracking-[0.2em] uppercase drop-shadow-sm",
                                             cancelled ? "text-red-400" : "text-white",
                                         )}>
-                                            {cancelled ? "Cancelled" : live?.status ? live.status : "Live"}
+                                            {cancelled ? "Cancelled" : primaryLiveStatus(live?.status ?? null)}
                                         </span>
+                                        {!cancelled && delayMin != null && delayMin !== 0 && (
+                                            <span className={cn(
+                                                "text-[10px] font-black tracking-widest uppercase drop-shadow-sm",
+                                                delayMin > 0 ? "text-dubai-gold" : "text-white/70",
+                                            )}>
+                                                {delayMin > 0 ? `+${delayMin}M` : `-${Math.abs(delayMin)}M`}
+                                            </span>
+                                        )}
+                                        <motion.span
+                                            animate={{ rotate: detailsOpen ? 180 : 0 }}
+                                            transition={spring.smooth}
+                                            className="flex items-center"
+                                            aria-hidden
+                                        >
+                                            <ChevronDown size={11} strokeWidth={3} className="text-white/50" />
+                                        </motion.span>
                                     </motion.div>
                                 )}
                             </AnimatePresence>
@@ -273,18 +287,6 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                                     <div className="absolute inset-y-0 left-0 w-full bg-white/20" />
                                 )}
                             </div>
-
-                            {isActive && live && (live.arrival_delay_min || live.gate_destination) && (
-                                <span className="mt-1.5 text-[9px] font-bold uppercase tracking-widest text-white/75">
-                                    {live.arrival_delay_min && live.arrival_delay_min > 0
-                                        ? `Delayed ${live.arrival_delay_min}m`
-                                        : live.arrival_delay_min && live.arrival_delay_min < 0
-                                            ? `Early ${Math.abs(live.arrival_delay_min)}m`
-                                            : null}
-                                    {live.arrival_delay_min && live.gate_destination ? " | " : null}
-                                    {live.gate_destination ? `Gate ${live.gate_destination}` : null}
-                                </span>
-                            )}
                         </div>
                     </div>
 
@@ -301,6 +303,60 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                     </div>
 
                 </div>
+
+                {/* Live details tucked behind a tap: gates on their matching
+                    sides, tracking link in the middle, behind a boarding-pass
+                    tear line. */}
+                <AnimatePresence initial={false}>
+                    {isActive && detailsOpen && (
+                        <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={spring.smooth}
+                            className={cn("overflow-hidden", isFullExperience ? "bg-black/55" : "bg-black/75")}
+                        >
+                            <div className="border-t border-dashed border-white/15 px-5 py-3 flex items-center justify-between gap-3">
+                                <div className="flex flex-col items-start w-1/3">
+                                    <span className="text-[8px] font-bold tracking-[0.2em] uppercase text-white/40">Dep</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/85 leading-tight">
+                                        {live && (live.terminal_origin || live.gate_origin)
+                                            ? [
+                                                  live.terminal_origin ? `T${live.terminal_origin}` : null,
+                                                  live.gate_origin ? `Gate ${live.gate_origin}` : null,
+                                              ].filter(Boolean).join(" · ")
+                                            : "—"}
+                                    </span>
+                                </div>
+                                {flightNumber !== "---" ? (
+                                    <a
+                                        href={`https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="flex items-center gap-1 text-[9px] font-black tracking-[0.2em] uppercase text-white/90 hover:text-white border border-white/20 rounded-full px-3 py-1.5 transition-colors hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                    >
+                                        Track live
+                                        <ExternalLink size={9} strokeWidth={3} aria-hidden />
+                                    </a>
+                                ) : (
+                                    <span aria-hidden />
+                                )}
+                                <div className="flex flex-col items-end w-1/3 text-right">
+                                    <span className="text-[8px] font-bold tracking-[0.2em] uppercase text-white/40">Arr</span>
+                                    <span className="text-[10px] font-bold uppercase tracking-widest text-white/85 leading-tight">
+                                        {live && (live.terminal_destination || live.gate_destination)
+                                            ? [
+                                                  live.terminal_destination ? `T${live.terminal_destination}` : null,
+                                                  live.gate_destination ? `Gate ${live.gate_destination}` : null,
+                                              ].filter(Boolean).join(" · ")
+                                            : "—"}
+                                    </span>
+                                </div>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Delete confirmation takes over the card itself, which reads far
                     clearer than swapping icon meanings on the tray buttons. */}
