@@ -22,7 +22,7 @@ const HOME_BASE = HOME_HUB_CODE;
 const TILT_LIMIT = (35 * Math.PI) / 180;
 const AUTO_ROTATE_RESUME_MS = 3000;
 const DESKTOP_GLOBE_ALTITUDE = 3.2;
-const MOBILE_GLOBE_ALTITUDE = 6.7;
+const MOBILE_GLOBE_ALTITUDE = 5.16;
 const CLUSTER_THRESHOLD_KM = 350;
 const POV_SYNC_INTERVAL_MS = 150;
 const POV_SYNC_EPSILON_DEG = 0.5;
@@ -445,11 +445,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
             NAV_PILL_CLASS,
           )}
         >
-          <StatPill value={travelStats.countries} label="Countries" />
-          <div className="w-[1px] h-3 bg-white/10" />
-          <StatPill value={travelStats.cities} label="Cities" />
-          <div className="w-[1px] h-3 bg-white/10" />
-          <StatPill value={travelStats.flights} label="Flights" />
+          <span className="text-xs font-bold tracking-widest uppercase text-white">Your World</span>
           <ChevronDown size={13} strokeWidth={3} className="text-white/50 -mr-1" aria-hidden />
         </button>
 
@@ -548,23 +544,6 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
         stats={travelStats}
         destinations={destinations}
       />
-    </div>
-  );
-}
-
-function StatPill({
-  value,
-  label,
-  dim = false,
-}: {
-  value: number | string;
-  label: string;
-  dim?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span className={cn("text-xs font-bold", dim ? "text-white/50" : "text-white")}>{value}</span>
-      <span className="text-[10px] font-bold tracking-widest uppercase text-white/55">{label}</span>
     </div>
   );
 }
