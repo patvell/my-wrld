@@ -6,6 +6,7 @@ import {
   pickFlightForDate,
   pickScheduleForDate,
   mapAeroFlightToStatus,
+  primaryLiveStatus,
   daySpan,
 } from "@/lib/aeroMapper";
 
@@ -129,5 +130,20 @@ describe("pickScheduleForDate", () => {
 
   it("returns null for an empty list", () => {
     expect(pickScheduleForDate([], "2026-07-01")).toBeNull();
+  });
+});
+
+describe("primaryLiveStatus", () => {
+  it("keeps only the phase before a qualifier", () => {
+    expect(primaryLiveStatus("En Route / Delayed")).toBe("En Route");
+  });
+
+  it("passes a plain status through", () => {
+    expect(primaryLiveStatus("Scheduled")).toBe("Scheduled");
+  });
+
+  it("falls back to Live when unknown", () => {
+    expect(primaryLiveStatus(null)).toBe("Live");
+    expect(primaryLiveStatus("")).toBe("Live");
   });
 });
