@@ -118,16 +118,19 @@ export default function Home() {
       setLoading(true);
       setLoadError(false);
     }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
     try {
-      const res = await fetch('/api/flights');
-      if (!res.ok) throw new Error('Failed to fetch flights');
+      const res = await fetch("/api/flights", { signal: controller.signal });
+      if (!res.ok) throw new Error("Failed to fetch flights");
       const data = await res.json();
       setFlights(Array.isArray(data) ? (data as Flight[]) : []);
       if (silent) setLoadError(false);
     } catch (error) {
-      console.error('Error fetching flights:', error);
+      console.error("Error fetching flights:", error);
       if (!silent) setLoadError(true);
     } finally {
+      clearTimeout(timeout);
       if (!silent) setLoading(false);
     }
   };
@@ -141,11 +144,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!loading) {
-      const timer = setTimeout(() => setIsReady(true), 100);
-      return () => clearTimeout(timer);
-    }
-  }, [loading]);
+    // Reveal the shell immediately so mobile users aren't stuck staring at an
+    // empty theme wash while /api/flights (Turso) cold-starts. List content
+    // still uses `loading` skeletons independently.
+    const timer = setTimeout(() => setIsReady(true), 50);
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleTabChange = (newTab: "home" | "history" | "settings" | "world") => {
     if (newTab === activeTab) return;

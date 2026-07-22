@@ -84,10 +84,11 @@ function BackgroundLayer({
 }
 
 export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
-    const { isFullExperience } = usePerformanceTier();
-    // Blobs stay visible on mobile (animation disabled via CSS); lower blur for perf.
+    const { isFullExperience, isMobile } = usePerformanceTier();
+    // Blobs stay visible; keep blur lighter on narrow viewports so the first
+    // paint stays snappy even though product UX is otherwise full experience.
     const showBlobs = true;
-    const blobBlurPx = isFullExperience ? 96 : 56;
+    const blobBlurPx = isFullExperience && !isMobile ? 96 : 56;
     const enableCrossfade = isFullExperience;
 
     const [settledTheme, setSettledTheme] = useState(theme);
