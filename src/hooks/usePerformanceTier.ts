@@ -20,21 +20,22 @@ function computeTier(isMobile: boolean, prefersReducedMotion: boolean): Performa
   return "full";
 }
 
-function readTier(): PerformanceTier {
-  const mobileQuery = getMobileQuery();
-  const motionQuery = getReducedMotionQuery();
-  if (!mobileQuery || !motionQuery) return "full";
-  return computeTier(mobileQuery.matches, motionQuery.matches);
-}
-
 /**
- * Performance tier for animation/blob density.
- * IMPORTANT: always start with a stable SSR default ("full") and only read
- * matchMedia after mount — otherwise narrow preview panes hydrate with
- * "mobile" and Next.js reports attribute mismatches (Turbopack overlay).
+ * Experience + layout hints.
+ *
+ * - `isFullExperience`: product UX matches desktop (glass, card springs, live
+ *   shimmer, etc.). True on phone and desktop; only `prefers-reduced-motion`
+ *   opts into the lite path.
+ * - `isMobile`: viewport ≤768px — layout/sizing only (globe altitude, sheet
+ *   drag, marker scale), never used to strip features.
+ *
+ * IMPORTANT: always start with stable SSR defaults and only read matchMedia
+ * after mount — otherwise narrow preview panes hydrate differently and Next
+ * reports attribute mismatches.
  */
 export function usePerformanceTier() {
   const [tier, setTier] = useState<PerformanceTier>("full");
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
 
   useEffect(() => {
     const mobileQuery = getMobileQuery();
@@ -42,6 +43,7 @@ export function usePerformanceTier() {
     if (!mobileQuery || !motionQuery) return;
 
     const update = () => {
+      setIsMobileViewport(mobileQuery.matches);
       setTier(computeTier(mobileQuery.matches, motionQuery.matches));
     };
 
@@ -57,8 +59,10 @@ export function usePerformanceTier() {
 
   return {
     tier,
-    isMobile: tier === "mobile" || tier === "reduced",
+    isMobile: isMobileViewport,
     prefersReducedMotion: tier === "reduced",
-    isFullExperience: tier === "full",
+    // Phone and desktop share the same product experience; only reduced-motion
+    // users get the lite visual path.
+    isFullExperience: tier !== "reduced",
   };
 }
