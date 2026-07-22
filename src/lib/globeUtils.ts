@@ -92,7 +92,8 @@ export function computeWorldTravelStats(
   const countable = opts.excludeReturnHome
     ? flights.filter((f) => !opts.excludeReturnHome!(f))
     : flights;
-  const past = countable.filter(isPastFn);
+  // Wrap callbacks — Array.filter passes (item, index, array); isPast's 2nd arg is Date.
+  const past = countable.filter((f) => isPastFn(f));
   const upcomingCount = countable.length - past.length;
 
   const airportCodes = new Set<string>();

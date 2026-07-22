@@ -34,15 +34,18 @@ export default function Home() {
   const [currentPersona, setCurrentPersona] = useState<PersonaMode>("plane");
   const [historySortAsc, setHistorySortAsc] = useState(false);
   const [activeOpenCardId, setActiveOpenCardId] = useState<string | null>(null);
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
-  const currentLocation = useMemo(() => getCurrentLocation(flights, now), [flights, now]);
+  const clock = now ?? new Date(0);
+
+  const currentLocation = useMemo(() => getCurrentLocation(flights, clock), [flights, clock]);
   const currentLocationCode = currentPersona === "home" ? PARTNER_CODE : currentLocation.code;
   const countryTheme = loading
     ? getCountryTheme(PARTNER_CODE)
@@ -54,14 +57,20 @@ export default function Home() {
   const softTextClass = isLightBg ? "text-neutral-700" : "text-white/60";
   const iconMutedClass = isLightBg ? "text-neutral-500" : "text-white opacity-50";
 
-  const upcomingFlights = useMemo(() => flights.filter((f) => !isPast(f, now)), [flights, now]);
+  const upcomingFlights = useMemo(
+    () => (now ? flights.filter((f) => !isPast(f, now)) : []),
+    [flights, now],
+  );
   const upcomingJourneys = useMemo(() => groupFlightsIntoJourneys(upcomingFlights, true), [upcomingFlights]);
   const liveFlightId = useMemo(
-    () => getNextLiveFlightId(upcomingFlights, now),
+    () => (now ? getNextLiveFlightId(upcomingFlights, now) : null),
     [upcomingFlights, now],
   );
 
-  const pastFlights = useMemo(() => flights.filter((f) => isPast(f, now)), [flights, now]);
+  const pastFlights = useMemo(
+    () => (now ? flights.filter((f) => isPast(f, now)) : []),
+    [flights, now],
+  );
   const pastJourneys = useMemo(() => groupFlightsIntoJourneys(pastFlights, historySortAsc), [pastFlights, historySortAsc]);
 
   useEffect(() => {
@@ -330,7 +339,7 @@ export default function Home() {
             <>
               <JourneyList
                 journeys={upcomingJourneys}
-                now={now}
+                now={clock}
                 activeOpenCardId={activeOpenCardId}
                 onToggleCard={handleCardToggle}
                 onDelete={handleDeleteTrip}
@@ -368,7 +377,7 @@ export default function Home() {
             <>
               <JourneyList
                 journeys={pastJourneys}
-                now={now}
+                now={clock}
                 activeOpenCardId={activeOpenCardId}
                 onToggleCard={handleCardToggle}
                 onDelete={handleDeleteTrip}

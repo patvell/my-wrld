@@ -390,7 +390,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
   }, []);
 
   const visitCounts = useMemo(
-    () => computeArrivalVisitCounts(flights, isPast),
+    () => computeArrivalVisitCounts(flights, (f) => isPast(f)),
     [flights],
   );
 
@@ -440,7 +440,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
 
   const worldStats = useMemo(
     () =>
-      computeWorldTravelStats(flights, isPast, {
+      computeWorldTravelStats(flights, (f) => isPast(f), {
         excludeReturnHome: isReturnToHome,
       }),
     [flights],

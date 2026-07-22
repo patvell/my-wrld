@@ -126,11 +126,27 @@ describe("computeWorldTravelStats", () => {
         status: "completed",
       }),
     ];
-    const stats = computeWorldTravelStats(flights, (f) => f.type === "past");
+    // Pass bare predicate that could be confused with Array.filter arity
+    const stats = computeWorldTravelStats(flights, ((f: Flight) => f.type === "past") as (f: Flight) => boolean);
     expect(stats.hoursFlown).toBeGreaterThan(0);
     expect(stats.mostVisited?.code).toBe("LHR");
     expect(stats.mostVisited?.visits).toBe(2);
     expect(stats.longestFlight?.label).toContain("→");
+  });
+
+  it("does not crash when isPast-like fn is passed directly to filter internals", () => {
+    const flights = [
+      makeFlight({ type: "past", status: "completed" }),
+      makeFlight({ type: "future", status: "scheduled", destination_code: "LHR", departure_time: "2099-01-01T10:00", arrival_time: "2099-01-01T14:00" }),
+    ];
+    // Simulate the production bug: filter(isPast) passes index as 2nd arg
+    expect(() =>
+      computeWorldTravelStats(flights, ((f: Flight, maybeIndex?: unknown) => {
+        // Mimic isPast signature; computeWorldTravelStats must only call with flight
+        if (typeof maybeIndex === "number") throw new Error("index leaked");
+        return f.type === "past";
+      }) as (f: Flight) => boolean),
+    ).not.toThrow();
   });
 });
 

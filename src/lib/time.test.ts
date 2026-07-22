@@ -132,6 +132,14 @@ describe("isPast", () => {
       ),
     ).toBe(false);
   });
+
+  it("ignores Array.filter index passed as the 2nd argument", () => {
+    // Regression: .filter(isPast) was calling isPast(flight, index)
+    expect(() => [flight].filter(isPast as (f: Flight) => boolean)).not.toThrow();
+    expect([flight].filter(isPast as (f: Flight) => boolean).length).toBe(
+      isPast(flight) ? 1 : 0,
+    );
+  });
 });
 
 describe("isActive", () => {

@@ -81,21 +81,24 @@ export function arrivalInstant(flight: Flight): Date {
  * - scheduled arrival was more than 2h ago (fallback for never-tracked flights).
  */
 export function isPast(flight: Flight, now: Date = new Date()): boolean {
+  // Guard: Array.filter/map pass an index as the 2nd arg — ignore non-Dates.
+  const t = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
   if (flight.status === "cancelled") return true;
   if (flight.status === "completed") {
     // Do not trust a premature "completed" while still before departure.
-    return now.getTime() >= departureInstant(flight).getTime();
+    return t.getTime() >= departureInstant(flight).getTime();
   }
-  return now.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
+  return t.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
 }
 
 /** Live-tracking window: from 3h before departure until 2h after arrival. */
 export function isActive(flight: Flight, now: Date = new Date()): boolean {
-  if (isPast(flight, now)) return false;
-  const t = now.getTime();
+  const t = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  if (isPast(flight, t)) return false;
+  const ms = t.getTime();
   return (
-    t >= departureInstant(flight).getTime() - LIVE_BEFORE_MS &&
-    t <= arrivalInstant(flight).getTime() + LIVE_AFTER_MS
+    ms >= departureInstant(flight).getTime() - LIVE_BEFORE_MS &&
+    ms <= arrivalInstant(flight).getTime() + LIVE_AFTER_MS
   );
 }
 
