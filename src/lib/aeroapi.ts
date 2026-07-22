@@ -70,12 +70,24 @@ interface SchedulesResponse {
   scheduled?: Array<{
     ident: string;
     ident_iata?: string | null;
+    /** Operating flight when this row is a codeshare. */
+    actual_ident?: string | null;
+    actual_ident_iata?: string | null;
     fa_flight_id?: string | null;
-    origin?: AeroAirport | null;
-    destination?: AeroAirport | null;
+    /** AeroAPI returns either nested airport objects or ICAO strings. */
+    origin?: AeroAirport | string | null;
+    destination?: AeroAirport | string | null;
+    /** Top-level IATA codes (common on /schedules). */
+    origin_iata?: string | null;
+    destination_iata?: string | null;
     scheduled_out?: string | null;
     scheduled_in?: string | null;
   }>;
+}
+
+/** FindFlight nests each itinerary's legs under `segments`. */
+interface FindFlightResponse {
+  flights?: Array<AeroFlight | { segments?: AeroFlight[] }>;
 }
 
 export type AeroIdentType = "designator" | "registration" | "fa_flight_id";
@@ -118,20 +130,39 @@ async function aeroFetch<T>(path: string, params: Record<string, string> = {}): 
   return (await res.json()) as T;
 }
 
+function airportIata(value: AeroAirport | string | null | undefined, fallback?: string | null): string | null {
+  if (fallback) return fallback.toUpperCase();
+  if (!value) return null;
+  if (typeof value === "string") return null; // ICAO string without IATA — use top-level fields
+  return value.code_iata?.toUpperCase() ?? null;
+}
+
 function normalizeSchedule(row: NonNullable<SchedulesResponse["scheduled"]>[number]): AeroSchedule | null {
-  const origin_iata = row.origin?.code_iata;
-  const destination_iata = row.destination?.code_iata;
+  // Prefer the operating Emirates flight when this row is a codeshare.
+  const operatingIdent = (row.actual_ident || row.ident || "").toUpperCase();
+  const operatingIata = (row.actual_ident_iata || row.ident_iata || "").toUpperCase();
+  // Only keep Emirates-operated services (skip pure codeshare marketing rows).
+  if (!operatingIdent.startsWith("UAE") && !operatingIata.startsWith("EK")) return null;
+  // Prefer native UAE rows so codeshares with skewed times don't duplicate.
+  if (!String(row.ident).toUpperCase().startsWith("UAE")) return null;
+
+  const origin_iata = airportIata(row.origin, row.origin_iata);
+  const destination_iata = airportIata(row.destination, row.destination_iata);
   const scheduled_out = row.scheduled_out;
   const scheduled_in = row.scheduled_in;
   if (!origin_iata || !destination_iata || !scheduled_out || !scheduled_in) return null;
+
+  const originObj = typeof row.origin === "object" && row.origin ? row.origin : null;
+  const destObj = typeof row.destination === "object" && row.destination ? row.destination : null;
+
   return {
-    ident: row.ident,
-    ident_iata: row.ident_iata,
+    ident: operatingIdent || row.ident,
+    ident_iata: operatingIata || row.ident_iata,
     fa_flight_id: row.fa_flight_id,
     origin_iata,
     destination_iata,
-    origin_timezone: row.origin?.timezone,
-    destination_timezone: row.destination?.timezone,
+    origin_timezone: originObj?.timezone,
+    destination_timezone: destObj?.timezone,
     scheduled_out,
     scheduled_in,
   };
@@ -203,20 +234,28 @@ export async function getSchedules(
 /**
  * Flights between two airports (FindFlight). Accepts IATA or ICAO airport ids.
  * Useful as a route-lookup fallback when /schedules returns nothing for IATA filters.
+ * Note: AeroAPI rejects an `airline` query param on this endpoint.
  */
 export async function getFlightsBetweenAirports(
   origin: string,
   destination: string,
-  opts: { start?: string; end?: string; max_pages?: number; airline?: string } = {},
+  opts: { start?: string; end?: string; max_pages?: number } = {},
 ): Promise<AeroFlight[]> {
   const params: Record<string, string> = {};
   if (opts.start) params.start = opts.start;
   if (opts.end) params.end = opts.end;
   if (opts.max_pages != null) params.max_pages = String(opts.max_pages);
-  if (opts.airline) params.airline = opts.airline;
-  const data = await aeroFetch<FlightsResponse>(
+  const data = await aeroFetch<FindFlightResponse>(
     `/airports/${encodeURIComponent(origin)}/flights/to/${encodeURIComponent(destination)}`,
     params,
   );
-  return data.flights ?? [];
+  const out: AeroFlight[] = [];
+  for (const row of data.flights ?? []) {
+    if (row && typeof row === "object" && "segments" in row && Array.isArray(row.segments)) {
+      out.push(...row.segments);
+    } else if (row && typeof row === "object" && "ident" in row) {
+      out.push(row as AeroFlight);
+    }
+  }
+  return out;
 }

@@ -212,3 +212,36 @@ export function formatLocalDate(value: string): string {
     .toUpperCase()
     .replace(",", "");
 }
+
+/**
+ * Translate an airport-local wall clock into another IANA timezone.
+ * Returns HH:mm and YYYY-MM-DD in the target zone.
+ */
+export function formatWallClockInTimezone(
+  wallClock: string,
+  airportCode: string,
+  targetTz: string,
+): { time: string; date: string } {
+  const instant = toInstant(wallClock, airportCode);
+  return {
+    time: formatInTimeZone(instant, targetTz, "HH:mm"),
+    date: formatInTimeZone(instant, targetTz, "yyyy-MM-dd"),
+  };
+}
+
+/**
+ * Calendar-day delta of the converted time vs the original wall-clock date
+ * (−1 / 0 / +1 typical). Used for a tiny overnight hint on dual-time UIs.
+ */
+export function wallClockDayOffset(
+  wallClock: string,
+  airportCode: string,
+  targetTz: string,
+): number {
+  const localDate = normalizeWallClock(wallClock).slice(0, 10);
+  const { date } = formatWallClockInTimezone(wallClock, airportCode, targetTz);
+  const a = Date.parse(`${localDate}T12:00:00Z`);
+  const b = Date.parse(`${date}T12:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}

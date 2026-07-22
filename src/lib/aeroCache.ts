@@ -1,5 +1,9 @@
 import { getDb } from "@/lib/db";
 
+export const LOOKUP_TTL_MS = 12 * 60 * 60 * 1000; // schedules are stable: 12h
+export const STATUS_TTL_MS = 30 * 1000; // live status: 30s (matches client poll)
+export const EVICT_AFTER_MS = 2 * LOOKUP_TTL_MS; // safely past every TTL
+
 /**
  * Tiny TTL cache backed by the `aeroapi_cache` table. Used to avoid repeated
  * (billed, rate-limited) AeroAPI calls for the same lookup/status within a window.
@@ -31,7 +35,12 @@ export async function setCached(key: string, payload: unknown): Promise<void> {
           ON CONFLICT(cache_key) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
     args: [key, JSON.stringify(payload), new Date().toISOString()],
   });
-}
 
-export const LOOKUP_TTL_MS = 12 * 60 * 60 * 1000; // schedules are stable: 12h
-export const STATUS_TTL_MS = 30 * 1000; // live status: 30s
+  // Opportunistically evict rows past the longest TTL so the table doesn't
+  // grow without bound.
+  const cutoff = new Date(Date.now() - EVICT_AFTER_MS).toISOString();
+  await db.execute({
+    sql: "DELETE FROM aeroapi_cache WHERE fetched_at < ?",
+    args: [cutoff],
+  });
+}

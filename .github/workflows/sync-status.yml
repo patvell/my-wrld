@@ -1,0 +1,24 @@
+name: Sync flight status
+
+# Vercel's free (Hobby) plan only allows cron jobs to run once a day, which is
+# too coarse for "moves to History when it lands." This workflow calls the
+# same endpoint on a tighter schedule at no cost, using GitHub's own
+# scheduler instead of Vercel's.
+#
+# Setup: in the repo's Settings -> Secrets and variables -> Actions, add:
+#   APP_URL      the deployed app's origin, e.g. https://my-wrld.vercel.app
+#   CRON_SECRET  must match the CRON_SECRET env var set on the Vercel project
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call sync-status endpoint
+        run: |
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/cron/sync-status"

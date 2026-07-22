@@ -247,6 +247,15 @@ export interface LiveStatus {
   terminal_destination: string | null;
 }
 
+/**
+ * The headline phase of a raw AeroAPI status, e.g. "En Route / Delayed" →
+ * "En Route". Delay is surfaced separately, so the qualifier is dropped.
+ */
+export function primaryLiveStatus(status: string | null): string {
+  const head = status?.split("/")[0]?.trim();
+  return head || "Live";
+}
+
 /** Map an AeroAPI flight to the compact live-status payload used by boarding passes. */
 export function mapAeroFlightToStatus(f: AeroFlight): LiveStatus {
   const originTz = f.origin?.timezone ?? getAirportTimezone(f.origin?.code_iata ?? "");

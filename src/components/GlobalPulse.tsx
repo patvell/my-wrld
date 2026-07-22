@@ -1,12 +1,15 @@
 import React, { useState, useEffect, memo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getTimezoneOffset } from "date-fns-tz";
 import { PersonaMode } from "@/types";
 import { Plane, Home } from "lucide-react";
 import { getAirportTimezone, AIRPORTS } from "@/data/airports";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { getReadableTextColors } from "@/lib/colors";
 import { PERSONA_SPRING, PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
+import { spring, hapticTap } from "@/lib/motion";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
+import { cn } from "@/lib/utils";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -16,6 +19,8 @@ interface GlobalPulseProps {
     persona: PersonaMode;
     onTogglePersona: () => void;
     isLoading?: boolean;
+    /** When false, interactive chrome cannot receive pointer/keyboard events (inactive tabs). */
+    interactive?: boolean;
 }
 
 function msUntilNextMinute() {
@@ -46,9 +51,11 @@ interface ClockDisplayProps {
     timezone: string;
     textColor: string;
     useFrostedChrome: boolean;
+    /** Roll digits vertically when they change (lock-screen feel). */
+    animateDigits: boolean;
 }
 
-const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useFrostedChrome }: ClockDisplayProps) {
+const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useFrostedChrome, animateDigits }: ClockDisplayProps) {
     const time = now
         ? new Intl.DateTimeFormat("en-US", {
               hour: "2-digit",
@@ -60,7 +67,7 @@ const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useF
 
     return (
         <h1
-            className="text-8xl font-medium tracking-tighter leading-none"
+            className="text-8xl font-medium tracking-tighter leading-none tabular-nums"
             style={{
                 color: textColor,
                 transition: `color ${PLACE_TRANSITION_CSS}`,
@@ -69,7 +76,26 @@ const ClockDisplay = memo(function ClockDisplay({ now, timezone, textColor, useF
                     : "0 2px 12px rgba(0,0,0,0.25)",
             }}
         >
-            {time}
+            {animateDigits
+                ? time.split("").map((char, i) => (
+                      // Each digit gets its own clipped window so changed digits
+                      // roll vertically while unchanged ones hold still.
+                      <span key={i} className="inline-block overflow-hidden align-bottom">
+                          <AnimatePresence mode="popLayout" initial={false}>
+                              <motion.span
+                                  key={char}
+                                  initial={{ y: "0.85em", opacity: 0 }}
+                                  animate={{ y: 0, opacity: 1 }}
+                                  exit={{ y: "-0.85em", opacity: 0 }}
+                                  transition={{ ...spring.smooth, delay: i * 0.03 }}
+                                  className="inline-block"
+                              >
+                                  {char}
+                              </motion.span>
+                          </AnimatePresence>
+                      </span>
+                  ))
+                : time}
         </h1>
     );
 });
@@ -105,9 +131,11 @@ export default function GlobalPulse({
     persona,
     onTogglePersona,
     isLoading = false,
+    interactive = true,
 }: GlobalPulseProps) {
-    const { isFullExperience } = usePerformanceTier();
+    const { isFullExperience, prefersReducedMotion } = usePerformanceTier();
     const now = useMinuteClock();
+    const animateDigits = isFullExperience && !prefersReducedMotion;
 
     const currentLocationCode = persona === "home" ? partnerCode : faCode;
     const countryTheme = getCountryTheme(currentLocationCode);
@@ -132,9 +160,7 @@ export default function GlobalPulse({
 
     const getTimeDiffText = (tzBig: string, tzSmall: string) => {
         if (!now) return "";
-        const dtBig = new Date(now.toLocaleString("en-US", { timeZone: tzBig }));
-        const dtSmall = new Date(now.toLocaleString("en-US", { timeZone: tzSmall }));
-        const diffMs = dtBig.getTime() - dtSmall.getTime();
+        const diffMs = getTimezoneOffset(tzBig, now) - getTimezoneOffset(tzSmall, now);
         const diffHours = Math.round((diffMs / (1000 * 60 * 60)) * 2) / 2;
         if (diffHours === 0) return "SAME TIME";
         const sign = diffHours > 0 ? "+" : "";
@@ -148,15 +174,28 @@ export default function GlobalPulse({
     const mainTimezone = persona === "plane" ? faTimezone : partnerTimezone;
     const altTimezone = persona === "plane" ? partnerTimezone : faTimezone;
 
-    const PersonaToggle = isFullExperience ? motion.div : "div";
+    const PersonaToggle = isFullExperience ? motion.button : "button";
 
     return (
         <div
-            className="fixed top-0 left-0 right-0 z-50 p-6 pt-16 pb-12 flex flex-col items-center gap-8 overflow-hidden pointer-events-none"
-            style={{ transition: `color ${PLACE_TRANSITION_CSS}` }}
+            className="fixed top-0 left-0 right-0 z-50 p-6 pb-12 flex flex-col items-center gap-6 overflow-hidden pointer-events-none"
+            style={{
+                transition: `color ${PLACE_TRANSITION_CSS}`,
+                // 64px in a browser tab (matches the old pt-16); grows under a
+                // notch/Dynamic Island in installed standalone mode.
+                paddingTop: "calc(max(env(safe-area-inset-top, 0px), 40px) + 24px)",
+            }}
         >
-            <div className="flex flex-col items-center justify-center w-full max-w-lg gap-2 pointer-events-auto">
-                <AnimatePresence mode="wait">
+            <div
+                className={cn(
+                    "flex flex-col items-center justify-center w-full max-w-lg",
+                    interactive && "pointer-events-auto",
+                )}
+            >
+                {/* Only the perspective label + location crossfade on toggle;
+                    the clock and date below stay mounted so the digits roll
+                    to the new timezone instead of two clocks overlapping. */}
+                <AnimatePresence mode="popLayout">
                     <motion.div
                         key={persona}
                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -214,17 +253,29 @@ export default function GlobalPulse({
                                 </>
                             )}
                         </div>
+                    </motion.div>
+                </AnimatePresence>
 
-                        <ClockDisplay
-                            now={now}
-                            timezone={mainTimezone}
-                            textColor={textColor}
-                            useFrostedChrome={useFrostedChrome}
-                        />
+                <ClockDisplay
+                    now={now}
+                    timezone={mainTimezone}
+                    textColor={textColor}
+                    useFrostedChrome={useFrostedChrome}
+                    animateDigits={animateDigits}
+                />
 
-                        <span
-                            className="text-xs font-bold uppercase tracking-widest mt-4 flex items-center gap-2"
-                            style={{ color: subTextColor, ...colorTransition }}
+                <span
+                    className="text-xs font-bold uppercase tracking-widest mt-4 h-4 flex items-center"
+                    style={{ color: subTextColor, ...colorTransition }}
+                >
+                    <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.span
+                            key={persona}
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -6 }}
+                            transition={PERSONA_SPRING}
+                            className="flex items-center gap-2"
                         >
                             {now ? (
                                 <>
@@ -235,9 +286,9 @@ export default function GlobalPulse({
                             ) : (
                                 "..."
                             )}
-                        </span>
-                    </motion.div>
-                </AnimatePresence>
+                        </motion.span>
+                    </AnimatePresence>
+                </span>
             </div>
 
             <PersonaToggle
@@ -248,8 +299,25 @@ export default function GlobalPulse({
                           whileTap: { scale: 0.95 },
                       }
                     : {})}
-                onClick={onTogglePersona}
-                className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10"
+                type="button"
+                disabled={!interactive}
+                tabIndex={interactive ? 0 : -1}
+                onClick={() => {
+                    if (!interactive) return;
+                    hapticTap();
+                    onTogglePersona();
+                }}
+                aria-pressed={persona === "home"}
+                aria-hidden={!interactive}
+                aria-label={
+                    persona === "plane"
+                        ? `Switch to home view (${partnerCity})`
+                        : `Switch to traveler view (${faCity})`
+                }
+                className={cn(
+                    "group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 shadow-lg shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    interactive ? "cursor-pointer pointer-events-auto" : "pointer-events-none",
+                )}
                 style={{
                     borderColor: useFrostedChrome ? "rgba(255,255,255,0.15)" : subTextColor,
                     transition: `color ${PLACE_TRANSITION_CSS}, border-color ${PLACE_TRANSITION_CSS}`,
@@ -262,7 +330,7 @@ export default function GlobalPulse({
                         textColor={useFrostedChrome ? onFrosted : textColor}
                     />
                     <span
-                        className="text-[9px] font-bold tracking-wider"
+                        className="text-[10px] font-bold tracking-wider"
                         style={{
                             color: useFrostedChrome ? "rgba(255,255,255,0.65)" : subTextColor,
                             ...colorTransition,

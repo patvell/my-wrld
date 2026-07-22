@@ -4,6 +4,7 @@ import {
   getFlightByFaId,
   getHistoricalFlightsByIdent,
   getSchedules,
+  getFlightsBetweenAirports,
   isAeroApiConfigured,
   AeroApiError,
 } from "@/lib/aeroapi";
@@ -143,5 +144,95 @@ describe("aeroapi client", () => {
     expect(schedules).toHaveLength(1);
     expect(schedules[0].origin_iata).toBe("DXB");
     expect(schedules[0].destination_iata).toBe("LHR");
+  });
+
+  it("getSchedules accepts top-level IATA strings from AeroAPI", async () => {
+    vi.stubEnv("FLIGHTAWARE_API_KEY", "secret");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            scheduled: [
+              {
+                ident: "GIA8887",
+                ident_iata: "GA8887",
+                actual_ident: "UAE1",
+                actual_ident_iata: "EK1",
+                origin: "OMDB",
+                destination: "EGLL",
+                origin_iata: "DXB",
+                destination_iata: "LHR",
+                scheduled_out: "2026-07-23T03:35:00Z",
+                scheduled_in: "2026-07-23T11:25:00Z",
+              },
+              {
+                ident: "UAE1",
+                ident_iata: "EK1",
+                origin: "OMDB",
+                destination: "EGLL",
+                origin_iata: "DXB",
+                destination_iata: "LHR",
+                scheduled_out: "2026-07-23T03:35:00Z",
+                scheduled_in: "2026-07-23T11:25:00Z",
+              },
+              {
+                ident: "UAE29",
+                ident_iata: "EK29",
+                origin: "OMDB",
+                destination: "EGLL",
+                origin_iata: "DXB",
+                destination_iata: "LHR",
+                scheduled_out: "2026-07-23T05:35:00Z",
+                scheduled_in: "2026-07-23T13:25:00Z",
+              },
+            ],
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    const schedules = await getSchedules("2026-07-23", "2026-07-24", { airline: "UAE" });
+    // Codeshare GIA8887 dropped; native UAE1 + UAE29 kept.
+    expect(schedules).toHaveLength(2);
+    expect(schedules.map((s) => s.ident_iata)).toEqual(["EK1", "EK29"]);
+    expect(schedules[0].origin_iata).toBe("DXB");
+  });
+
+  it("getFlightsBetweenAirports flattens FindFlight segments", async () => {
+    vi.stubEnv("FLIGHTAWARE_API_KEY", "secret");
+    const fetchMock = vi.fn(async (url: URL | string) => {
+      const u = new URL(String(url));
+      expect(u.searchParams.get("airline")).toBeNull();
+      return new Response(
+        JSON.stringify({
+          flights: [
+            {
+              segments: [
+                {
+                  ident: "UAE7",
+                  ident_iata: "EK7",
+                  fa_flight_id: "x",
+                  origin: { code_iata: "DXB" },
+                  destination: { code_iata: "LHR" },
+                  scheduled_out: "2026-07-23T22:30:00Z",
+                  scheduled_in: "2026-07-24T06:05:00Z",
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const flights = await getFlightsBetweenAirports("DXB", "LHR", {
+      start: "2026-07-23",
+      end: "2026-07-24",
+    });
+    expect(flights).toHaveLength(1);
+    expect(flights[0].ident_iata).toBe("EK7");
   });
 });

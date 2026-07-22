@@ -9,6 +9,7 @@ import { Flight, FlightInput } from "@/types";
 import { buildWallClock, normalizeWallClock, padTimeInput, toInstant } from "@/lib/time";
 import { daySpan } from "@/lib/aeroMapper";
 import { AIRLINE_CODE, formatFlightDigits } from "@/lib/config";
+import AirportField from "@/components/AirportField";
 
 /** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
 function addDays(date: string, n: number): string {
@@ -82,22 +83,39 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
     const applyLookupFlight = (
         f: FlightInput,
-        opts: { daySpan?: number; faFlightId?: string | null; baseDate?: string },
+        opts: {
+            daySpan?: number;
+            faFlightId?: string | null;
+            baseDate?: string;
+            /** Keep the user's origin/dest dates; only apply number + times (+ overnight dest). */
+            preserveUserDates?: boolean;
+        },
     ) => {
         const dep = normalizeWallClock(f.departure_time);
         const arr = normalizeWallClock(f.arrival_time);
         const span = opts.daySpan ?? daySpan(dep, arr);
-        const baseDate = opts.baseDate || dep.slice(0, 10) || new Date().toISOString().slice(0, 10);
 
         setOrigin(f.origin_code);
-        setOriginDate(baseDate);
-        setOriginTime(dep.slice(11, 16));
         setDestination(f.destination_code);
-        setDestDate(addDays(baseDate, span));
+        setOriginTime(dep.slice(11, 16));
         setDestTime(arr.slice(11, 16));
         setArrivalDayOffset(span);
         setPendingFaFlightId(opts.faFlightId ?? null);
         if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
+
+        if (opts.preserveUserDates) {
+            // Dates stay user-owned. Only align destDate when overnight (or missing).
+            if (originDate) {
+                if (span > 0 || !destDate) {
+                    setDestDate(addDays(originDate, span));
+                }
+            }
+        } else {
+            const baseDate = opts.baseDate || dep.slice(0, 10) || new Date().toISOString().slice(0, 10);
+            setOriginDate(baseDate);
+            setDestDate(addDays(baseDate, span));
+        }
+
         setErrors({});
         setRouteOptions([]);
     };
@@ -180,7 +198,11 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
             const res = await fetch(`/api/aeroapi/route-lookup?${params.toString()}`);
             const data = await res.json().catch(() => ({}));
             if (!res.ok) {
-                toast.error(typeof data?.error === "string" ? data.error : "Route lookup failed");
+                if (res.status === 429) {
+                    toast.error("Flight lookup rate limited — try again in a moment");
+                } else {
+                    toast.error(typeof data?.error === "string" ? data.error : "Route lookup failed");
+                }
                 return;
             }
             if (!data.configured) {
@@ -189,22 +211,30 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 return;
             }
             if (!data.found || !Array.isArray(data.flights) || data.flights.length === 0) {
-                toast.error("No Emirates flights found for that route and date");
+                toast.error("No Emirates flights found for that route");
                 return;
             }
             const options = data.flights as typeof routeOptions;
+            const dateRelaxed = Boolean(data.date_relaxed);
+            const relaxedToast =
+                "Showing typical Emirates flights for this route — date left as entered";
+
             if (options.length === 1) {
                 const opt = options[0];
                 applyLookupFlight(opt.flight, {
                     daySpan: opt.day_span,
                     faFlightId: opt.fa_flight_id ?? null,
-                    baseDate: lookupDate,
+                    preserveUserDates: true,
                 });
-                toast.success(`Found ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`);
+                toast.success(
+                    dateRelaxed
+                        ? relaxedToast
+                        : `Found ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`,
+                );
                 return;
             }
             setRouteOptions(options);
-            toast.success(`${options.length} flights found — pick one`);
+            toast.success(dateRelaxed ? relaxedToast : `${options.length} flights found — pick one`);
         } catch {
             toast.error("Could not find flights for that route");
         } finally {
@@ -213,11 +243,10 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     };
 
     const selectRouteOption = (opt: (typeof routeOptions)[number]) => {
-        const lookupDate = originDate || opt.departure_time.slice(0, 10);
         applyLookupFlight(opt.flight, {
             daySpan: opt.day_span,
             faFlightId: opt.fa_flight_id ?? null,
-            baseDate: lookupDate,
+            preserveUserDates: true,
         });
         toast.success(`Selected ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`);
     };
@@ -497,27 +526,28 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 <div className="w-1.5 h-1.5 rounded-full bg-emirates-red" />
                                                 Depart From
                                             </label>
-                                            <div className="relative group">
-                                                <input
-                                                    id="origin-input"
-                                                    type="text"
-                                                    value={origin}
-                                                    onChange={(e) => {
-                                                        setOrigin(e.target.value);
-                                                        setRouteOptions([]);
-                                                        if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
-                                                    }}
-                                                    maxLength={3}
-                                                    placeholder="DXB"
-                                                    className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.origin ? 'border-red-500/50' : 'border-white/10 focus:border-emirates-red/50'}`}
-                                                    required
-                                                />
-                                            </div>
+                                            <AirportField
+                                                id="origin-input"
+                                                value={origin}
+                                                onChange={(v) => {
+                                                    setOrigin(v);
+                                                    setRouteOptions([]);
+                                                    if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
+                                                }}
+                                                placeholder="DXB"
+                                                hasError={Boolean(errors.origin)}
+                                                accentClass="focus:border-emirates-red/50"
+                                            />
+                                            {errors.origin && (
+                                                <p role="alert" className="text-[11px] font-bold text-red-400 ml-1">
+                                                    {errors.origin}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Date */}
                                         <div className="space-y-1">
-                                            <label htmlFor="origin-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
+                                            <label htmlFor="origin-date" className="h-5 flex items-center text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Date</label>
                                             <div className="relative">
                                                 <Calendar size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
@@ -528,7 +558,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                         handleOriginDateChange(e.target.value);
                                                         setRouteOptions([]);
                                                     }}
-                                                    className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
+                                                    className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer appearance-none [-webkit-appearance:none] min-w-0 box-border"
                                                     required
                                                 />
                                             </div>
@@ -536,7 +566,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Time */}
                                         <div className="space-y-1">
-                                            <label htmlFor="origin-time" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
+                                            <label htmlFor="origin-time" className="h-5 flex items-center text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1">Time</label>
                                             <div className="relative">
                                                 <Clock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
@@ -563,22 +593,23 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 <div className="w-1.5 h-1.5 rounded-full bg-dubai-gold" />
                                                 <span className="hidden md:inline">Arrive At</span> {/* Desktop label order */}
                                             </label>
-                                            <div className="relative group">
-                                                <input
-                                                    id="dest-input"
-                                                    type="text"
-                                                    value={destination}
-                                                    onChange={(e) => {
-                                                        setDestination(e.target.value);
-                                                        setRouteOptions([]);
-                                                        if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
-                                                    }}
-                                                    maxLength={3}
-                                                    placeholder="LHR"
-                                                    className={`w-full h-14 md:h-16 bg-white/5 border rounded-2xl text-center text-xl md:text-2xl text-white font-bold tracking-widest uppercase focus:outline-none focus:bg-white/10 transition-all placeholder:text-white/10 ${errors.destination ? 'border-red-500/50' : 'border-white/10 focus:border-dubai-gold/50'}`}
-                                                    required
-                                                />
-                                            </div>
+                                            <AirportField
+                                                id="dest-input"
+                                                value={destination}
+                                                onChange={(v) => {
+                                                    setDestination(v);
+                                                    setRouteOptions([]);
+                                                    if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
+                                                }}
+                                                placeholder="LHR"
+                                                hasError={Boolean(errors.destination)}
+                                                accentClass="focus:border-dubai-gold/50"
+                                            />
+                                            {errors.destination && (
+                                                <p role="alert" className="text-[11px] font-bold text-red-400 ml-1 md:text-right md:mr-1">
+                                                    {errors.destination}
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Date */}

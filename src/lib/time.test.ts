@@ -13,6 +13,8 @@ import {
   getCurrentLocation,
   formatLocalTime,
   formatLocalDate,
+  formatWallClockInTimezone,
+  wallClockDayOffset,
 } from "@/lib/time";
 
 function makeFlight(overrides: Partial<Flight>): Flight {
@@ -228,5 +230,29 @@ describe("formatters", () => {
   });
   it("formats date exactly as entered", () => {
     expect(formatLocalDate("2026-01-30T03:40")).toBe("JAN 30 2026");
+  });
+});
+
+describe("formatWallClockInTimezone", () => {
+  it("converts STN local arrival into YUL (Eastern) time", () => {
+    // 2026-07-22: London BST (UTC+1), Montreal EDT (UTC−4)
+    // 12:55 BST = 11:55 UTC = 07:55 EDT
+    const converted = formatWallClockInTimezone(
+      "2026-07-22T12:55",
+      "STN",
+      "America/Montreal",
+    );
+    expect(converted.time).toBe("07:55");
+    expect(converted.date).toBe("2026-07-22");
+  });
+
+  it("reports a day offset when the converted calendar day differs", () => {
+    // DXB 02:15 Asia/Dubai (UTC+4) = 22:15 previous day in Montreal (EDT UTC−4)
+    expect(
+      wallClockDayOffset("2026-07-22T02:15", "DXB", "America/Montreal"),
+    ).toBe(-1);
+    expect(
+      formatWallClockInTimezone("2026-07-22T02:15", "DXB", "America/Montreal").time,
+    ).toBe("18:15");
   });
 });
