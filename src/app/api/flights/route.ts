@@ -11,7 +11,13 @@ export async function GET(request: Request) {
       sql: 'SELECT * FROM flights WHERE user_id = ? ORDER BY departure_time ASC',
       args: [userId],
     });
-    return NextResponse.json(result.rows);
+    return NextResponse.json(result.rows, {
+      headers: {
+        // Short private cache so repeat opens on mobile feel instant; silent
+        // refresh still revalidates in the background.
+        "Cache-Control": "private, max-age=30, stale-while-revalidate=120",
+      },
+    });
   } catch (error) {
     console.error('Error fetching flights:', error);
     return NextResponse.json({ error: 'Failed to fetch flights' }, { status: 500 });
