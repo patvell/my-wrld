@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flight } from "@/types";
-import { Plane, Trash2, Edit, X, Check } from "lucide-react";
+import { Plane, Trash2, Edit, X, Check, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
 import { AIRLINE_CODE, FLIGHTAWARE_CARRIER, formatFlightDisplay } from "@/lib/config";
@@ -83,11 +83,16 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         }
     };
 
+    const openTrackLive = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (flightNumber === "---") return;
+        window.open(
+            `https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`,
+            "_blank",
+        );
+    };
+
     const activate = () => {
-        if (isActive && flightNumber !== "---") {
-            window.open(`https://www.flightaware.com/live/flight/${FLIGHTAWARE_CARRIER}${flightNumber}`, '_blank');
-            return;
-        }
         if (isShifted) {
             setIsConfirmingDelete(false);
         }
@@ -101,14 +106,36 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         }
     };
 
-    const actionLabel = isActive
-        ? `Open live tracking for flight ${AIRLINE_CODE}${flightNumber}`
-        : `${isShifted ? "Hide" : "Show"} actions for ${flight.origin_code} to ${flight.destination_code}`;
+    const actionLabel = `${isShifted ? "Hide" : "Show"} actions for ${flight.origin_code} to ${flight.destination_code}`;
+    // Active cards need room for Track Live + Edit + Delete.
+    const shiftPx = isActive ? 200 : 140;
 
     return (
         <div className="relative w-full max-w-sm group h-44">
             {/* Action Buttons Layer (Behind) */}
             <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-2 z-0">
+                {isActive && flightNumber !== "---" && (
+                    <motion.button
+                        initial={{ scale: 0.8, opacity: 0, x: 20 }}
+                        animate={{
+                            scale: isShifted ? 1 : 0.8,
+                            opacity: isShifted ? 1 : 0,
+                            x: isShifted ? 0 : 20,
+                            backgroundColor: "rgba(255, 255, 255, 0.12)",
+                        }}
+                        transition={{
+                            delay: isShifted ? 0.55 : 0,
+                            type: "spring", stiffness: 400, damping: 35
+                        }}
+                        onClick={openTrackLive}
+                        aria-label={`Track live flight ${AIRLINE_CODE}${flightNumber} on FlightAware`}
+                        tabIndex={isShifted ? 0 : -1}
+                        className="h-12 px-3 rounded-full flex flex-col items-center justify-center gap-0.5 glass-solid text-white border border-white/20 hover:bg-white/15 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                    >
+                        <ExternalLink size={14} />
+                        <span className="text-[8px] font-black tracking-widest uppercase leading-none">Live</span>
+                    </motion.button>
+                )}
                 <motion.button
                     initial={{ scale: 0.8, opacity: 0, x: 20 }}
                     animate={{
@@ -118,7 +145,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         backgroundColor: "rgba(0, 0, 0, 0.4)",
                     }}
                     transition={{
-                        delay: isShifted ? 0.6 : 0,
+                        delay: isShifted ? (isActive ? 0.6 : 0.6) : 0,
                         type: "spring", stiffness: 400, damping: 35
                     }}
                     onClick={handleEdit}
@@ -137,7 +164,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         backgroundColor: isConfirmingDelete ? "rgba(239, 68, 68, 0.8)" : "rgba(0, 0, 0, 0.4)"
                     }}
                     transition={{
-                        delay: isShifted ? 0.65 : 0,
+                        delay: isShifted ? (isActive ? 0.65 : 0.65) : 0,
                         type: "spring", stiffness: 400, damping: 35
                     }}
                     onClick={handleDelete}
@@ -158,7 +185,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 role="button"
                 tabIndex={0}
                 aria-label={actionLabel}
-                animate={{ x: isShifted ? -140 : 0 }}
+                animate={{ x: isShifted ? -shiftPx : 0 }}
                 transition={{
                     type: "spring", stiffness: 500, damping: 40,
                     delay: isShifted ? 0 : 0.1

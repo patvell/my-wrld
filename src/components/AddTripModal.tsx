@@ -178,8 +178,11 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 date: lookupDate,
             });
             const res = await fetch(`/api/aeroapi/route-lookup?${params.toString()}`);
-            if (!res.ok) throw new Error("Route lookup failed");
-            const data = await res.json();
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                toast.error(typeof data?.error === "string" ? data.error : "Route lookup failed");
+                return;
+            }
             if (!data.configured) {
                 toast.error("Flight lookup is not configured");
                 setAeroConfigured(false);
@@ -353,6 +356,11 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         if (!timeRegex.test(paddedDestTime)) {
             newErrors.destination = "Check Time";
         }
+        if (!flightNum.replace(/\D/g, "")) {
+            toast.error("Enter a flight number or find flights for the route");
+            setErrors(newErrors);
+            return;
+        }
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
@@ -456,7 +464,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                             placeholder="000"
                                             className="bg-transparent border-none text-4xl w-32 font-bold text-white tracking-tighter placeholder:text-white/10 focus:outline-none text-center p-0"
                                             autoFocus
-                                            required
                                         />
                                     </div>
 
@@ -541,7 +548,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={originTime}
                                                     onChange={(e) => handleTimeChange(e.target.value, setOriginTime)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all placeholder:text-white/10"
-                                                    required
                                                 />
                                             </div>
                                         </div>
@@ -606,7 +612,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={destTime}
                                                     onChange={(e) => handleTimeChange(e.target.value, setDestTime)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 md:pl-4 md:pr-12 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all placeholder:text-white/10 text-left md:text-right"
-                                                    required
                                                 />
                                             </div>
                                         </div>

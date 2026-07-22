@@ -75,18 +75,23 @@ export function arrivalInstant(flight: Flight): Date {
 }
 
 /**
- * A flight is "past" (belongs in History) when AeroAPI has confirmed it
- * completed/cancelled, or — as a fallback for never-tracked flights — once
- * scheduled arrival was more than 2h ago.
+ * A flight is "past" (History) when:
+ * - cancelled, or
+ * - marked completed AND departure has already happened (guards false AeroAPI matches), or
+ * - scheduled arrival was more than 2h ago (fallback for never-tracked flights).
  */
 export function isPast(flight: Flight, now: Date = new Date()): boolean {
-  if (flight.status === "completed" || flight.status === "cancelled") return true;
+  if (flight.status === "cancelled") return true;
+  if (flight.status === "completed") {
+    // Do not trust a premature "completed" while still before departure.
+    return now.getTime() >= departureInstant(flight).getTime();
+  }
   return now.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
 }
 
 /** Live-tracking window: from 3h before departure until 2h after arrival. */
 export function isActive(flight: Flight, now: Date = new Date()): boolean {
-  if (flight.status === "completed" || flight.status === "cancelled") return false;
+  if (isPast(flight, now)) return false;
   const t = now.getTime();
   return (
     t >= departureInstant(flight).getTime() - LIVE_BEFORE_MS &&

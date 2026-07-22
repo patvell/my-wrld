@@ -76,7 +76,44 @@ export function filterFlightsByRoute(
   return matched.length > 0 ? matched : flights;
 }
 
+/**
+ * Pick the operational instance for live tracking.
+ * Prefer flights that have not already arrived — avoids latching onto
+ * yesterday's landed copy of the same flight number.
+ */
+export function pickFlightForLiveTracking(
+  flights: AeroFlight[],
+  date: string,
+  opts: { preferNotArrived?: boolean } = {},
+): AeroFlight | null {
+  if (flights.length === 0) return null;
+
+  let pool = flights;
+  if (opts.preferNotArrived) {
+    const open = flights.filter((f) => !f.actual_in && !f.cancelled);
+    if (open.length > 0) pool = open;
+  }
+
+  return pickFlightForDate(pool, date);
+}
+
 const MAX_PLAUSIBLE_DELAY_MIN = 12 * 60; // hide absurd delay values from bad matches
+
+/** True only with hard evidence the aircraft has arrived at the gate. */
+export function isConfirmedArrival(live: {
+  actual_in?: string | null;
+  status?: string | null;
+  progress_percent?: number | null;
+  cancelled?: boolean;
+}): boolean {
+  if (live.cancelled) return false;
+  if (live.actual_in) return true;
+  const s = (live.status ?? "").toLowerCase();
+  if ((s === "arrived" || s.includes("arrived")) && (live.progress_percent ?? 0) >= 90) {
+    return true;
+  }
+  return false;
+}
 
 /** Clamp AeroAPI delay seconds → minutes; null if missing or implausible. */
 export function plausibleDelayMin(delaySeconds: number | null | undefined): number | null {

@@ -9,12 +9,14 @@ import {
 } from "@/lib/aeroapi";
 import {
   filterFlightsByRoute,
+  isConfirmedArrival,
   mapAeroFlightToStatus,
-  pickFlightForDate,
+  pickFlightForLiveTracking,
   type LiveStatus,
 } from "@/lib/aeroMapper";
 import { getCached, setCached, STATUS_TTL_MS } from "@/lib/aeroCache";
 import { toAeroIdent } from "@/lib/config";
+import { toInstant } from "@/lib/time";
 
 interface StatusResult {
   configured: boolean;
@@ -30,27 +32,35 @@ function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function isArrivedStatus(status: string | null | undefined): boolean {
-  if (!status) return false;
-  const s = status.toLowerCase();
-  return s.includes("arrived") || s.includes("landed") || s.includes("completed");
-}
-
 async function syncFlightStatus(
   db: Awaited<ReturnType<typeof getDb>>,
   flightId: string,
   userId: string,
   live: LiveStatus,
   existingFaId: string | null,
-): Promise<{ landed: boolean; faFlightId: string | null }> {
+  departureWallClock: string,
+  originCode: string,
+  currentStatus: string,
+): Promise<{ landed: boolean }> {
+  const nowMs = Date.now();
+  const depMs = toInstant(departureWallClock, originCode).getTime();
+  const beforeDeparture = nowMs < depMs;
+
+  // Heal false completions: AeroAPI matched a prior landed instance.
+  if (beforeDeparture && (currentStatus === "completed" || currentStatus === "cancelled")) {
+    await db.execute({
+      sql: "UPDATE flights SET status = ?, type = ? WHERE id = ? AND user_id = ?",
+      args: ["scheduled", "future", flightId, userId],
+    });
+  }
+
   let newStatus: "completed" | "cancelled" | null = null;
-  if (live.cancelled) {
+  if (live.cancelled && !beforeDeparture) {
     newStatus = "cancelled";
-  } else if (live.actual_in || isArrivedStatus(live.status)) {
+  } else if (!beforeDeparture && isConfirmedArrival(live)) {
     newStatus = "completed";
   }
 
-  const faFlightId = live.fa_flight_id || existingFaId;
   const shouldPersistFaId = Boolean(live.fa_flight_id && live.fa_flight_id !== existingFaId);
 
   if (newStatus && shouldPersistFaId) {
@@ -70,7 +80,7 @@ async function syncFlightStatus(
     });
   }
 
-  return { landed: Boolean(newStatus), faFlightId };
+  return { landed: Boolean(newStatus) };
 }
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -103,14 +113,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ configured: true, found: false } satisfies StatusResult);
     }
 
+    // Skip cache when healing a premature completion so the next poll is fresh.
+    const depMs = toInstant(departureTime, originCode).getTime();
+    const beforeDeparture = Date.now() < depMs;
+    const needsHeal =
+      beforeDeparture && (currentStatus === "completed" || currentStatus === "cancelled");
+
     const cacheKey = `status:${id}`;
-    const cached = await getCached<StatusResult>(cacheKey, STATUS_TTL_MS);
-    if (cached) return NextResponse.json(cached);
+    if (!needsHeal) {
+      const cached = await getCached<StatusResult>(cacheKey, STATUS_TTL_MS);
+      if (cached) return NextResponse.json(cached);
+    }
 
     const date = departureTime.slice(0, 10);
     let match = null;
-    if (faFlightId) {
+    if (faFlightId && !needsHeal) {
       match = await getFlightByFaId(faFlightId);
+      // Stale fa_flight_id from a previous day's instance — ignore if already arrived
+      // while our flight has not departed yet.
+      if (match && beforeDeparture && (match.actual_in || match.cancelled)) {
+        match = null;
+      }
     }
     if (!match && flightNumber) {
       const aeroIdent = toAeroIdent(flightNumber);
@@ -119,25 +142,41 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         end: addDays(date, 1),
       });
       const routed = filterFlightsByRoute(flights, originCode, destinationCode);
-      match = pickFlightForDate(routed, date);
+      match = pickFlightForLiveTracking(routed, date, {
+        preferNotArrived: beforeDeparture || Date.now() < depMs + 6 * 60 * 60 * 1000,
+      });
     }
 
     if (!match) {
+      // Still heal false completion even when AeroAPI has no match.
+      if (needsHeal) {
+        await db.execute({
+          sql: "UPDATE flights SET status = ?, type = ? WHERE id = ? AND user_id = ?",
+          args: ["scheduled", "future", id, userId],
+        });
+      }
       const result: StatusResult = { configured: true, found: false };
       await setCached(cacheKey, result);
       return NextResponse.json(result);
     }
 
     const live = mapAeroFlightToStatus(match);
-    const { landed } = await syncFlightStatus(db, id, userId, live, faFlightId);
+    const { landed } = await syncFlightStatus(
+      db,
+      id,
+      userId,
+      live,
+      faFlightId,
+      departureTime,
+      originCode,
+      currentStatus,
+    );
 
-    // Already completed in DB still counts as landed for the client refresh path.
-    const alreadyDone = currentStatus === "completed" || currentStatus === "cancelled";
     const result: StatusResult = {
       configured: true,
       found: true,
       status: live,
-      landed: landed || (alreadyDone && (Boolean(live.actual_in) || isArrivedStatus(live.status) || live.cancelled)),
+      landed,
     };
 
     await setCached(cacheKey, result);

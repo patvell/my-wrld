@@ -8,6 +8,7 @@ import {
   computeTotalKmFlown,
   formatKmFlown,
   geoDistanceKm,
+  computeWorldTravelStats,
 } from "@/lib/globeUtils";
 
 function makeFlight(overrides: Partial<Flight>): Flight {
@@ -94,6 +95,42 @@ describe("km flown", () => {
   it("formats km with unit left to the label", () => {
     expect(formatKmFlown(850)).toBe("850");
     expect(formatKmFlown(232400)).toBe("232.4K");
+  });
+});
+
+describe("computeWorldTravelStats", () => {
+  it("includes hours, longest, and most visited", () => {
+    const flights = [
+      makeFlight({
+        origin_code: "DXB",
+        destination_code: "LHR",
+        departure_time: "2026-01-01T02:00",
+        arrival_time: "2026-01-01T08:00",
+        type: "past",
+        status: "completed",
+      }),
+      makeFlight({
+        origin_code: "DXB",
+        destination_code: "LHR",
+        departure_time: "2026-02-01T02:00",
+        arrival_time: "2026-02-01T08:00",
+        type: "past",
+        status: "completed",
+      }),
+      makeFlight({
+        origin_code: "DXB",
+        destination_code: "BLR",
+        departure_time: "2026-03-01T10:00",
+        arrival_time: "2026-03-01T14:00",
+        type: "past",
+        status: "completed",
+      }),
+    ];
+    const stats = computeWorldTravelStats(flights, (f) => f.type === "past");
+    expect(stats.hoursFlown).toBeGreaterThan(0);
+    expect(stats.mostVisited?.code).toBe("LHR");
+    expect(stats.mostVisited?.visits).toBe(2);
+    expect(stats.longestFlight?.label).toContain("→");
   });
 });
 

@@ -71,6 +71,94 @@ export function formatKmFlown(km: number): string {
   return String(Math.round(km));
 }
 
+export interface WorldTravelStats {
+  cities: number;
+  kmFlown: number;
+  kmFlownLabel: string;
+  hoursFlown: number;
+  hoursFlownLabel: string;
+  longestFlight: { km: number; label: string; kmLabel: string } | null;
+  mostVisited: { code: string; city: string; visits: number } | null;
+  pastCount: number;
+  upcomingCount: number;
+}
+
+/** Aggregate travel stats for the Your World sheet. */
+export function computeWorldTravelStats(
+  flights: Flight[],
+  isPastFn: (f: Flight) => boolean,
+  opts: { excludeReturnHome?: (f: Flight) => boolean } = {},
+): WorldTravelStats {
+  const countable = opts.excludeReturnHome
+    ? flights.filter((f) => !opts.excludeReturnHome!(f))
+    : flights;
+  const past = countable.filter(isPastFn);
+  const upcomingCount = countable.length - past.length;
+
+  const airportCodes = new Set<string>();
+  for (const f of countable) {
+    airportCodes.add(f.origin_code);
+    airportCodes.add(f.destination_code);
+  }
+
+  let hours = 0;
+  let longest: { km: number; label: string } | null = null;
+  let kmTotal = 0;
+
+  for (const f of past) {
+    const o = AIRPORTS[f.origin_code];
+    const d = AIRPORTS[f.destination_code];
+    if (o?.lat != null && o?.lng != null && d?.lat != null && d?.lng != null) {
+      const km = geoDistanceKm(o.lat, o.lng, d.lat, d.lng);
+      kmTotal += km;
+      if (!longest || km > longest.km) {
+        longest = { km, label: `${f.origin_code} → ${f.destination_code}` };
+      }
+    }
+    const dep = Date.parse(f.departure_time);
+    const arr = Date.parse(f.arrival_time);
+    if (!Number.isNaN(dep) && !Number.isNaN(arr) && arr > dep) {
+      // Wall-clock span; overnight already encoded in dates.
+      hours += (arr - dep) / (1000 * 60 * 60);
+    }
+  }
+
+  const visits = computeArrivalVisitCounts(past, () => true);
+  let mostVisited: WorldTravelStats["mostVisited"] = null;
+  for (const [code, count] of Object.entries(visits)) {
+    if (!mostVisited || count > mostVisited.visits) {
+      mostVisited = {
+        code,
+        city: normalizeCityName(AIRPORTS[code]?.city ?? code),
+        visits: count,
+      };
+    }
+  }
+
+  const hoursRounded = Math.round(hours * 10) / 10;
+
+  return {
+    cities: uniqueCityCount(airportCodes),
+    kmFlown: kmTotal,
+    kmFlownLabel: formatKmFlown(kmTotal),
+    hoursFlown: hoursRounded,
+    hoursFlownLabel:
+      hoursRounded >= 100
+        ? `${Math.round(hoursRounded)}`
+        : hoursRounded.toFixed(1).replace(/\.0$/, ""),
+    longestFlight: longest
+      ? {
+          km: longest.km,
+          label: longest.label,
+          kmLabel: formatKmFlown(longest.km),
+        }
+      : null,
+    mostVisited,
+    pastCount: past.length,
+    upcomingCount,
+  };
+}
+
 /** Unit vector on the sphere for a lat/lng pair (degrees). */
 function latLngToUnit(lat: number, lng: number) {
   const phi = ((90 - lat) * Math.PI) / 180;

@@ -118,6 +118,20 @@ describe("isPast", () => {
       ),
     ).toBe(true);
   });
+
+  it("does not treat premature completed as past before departure", () => {
+    // dep 10:00 DXB = 06:00Z — at 04:00Z departure has not happened yet
+    expect(
+      isPast(
+        makeFlight({
+          status: "completed",
+          destination_code: "DXB",
+          destination_city: "Dubai",
+        }),
+        new Date("2026-01-30T04:00:00Z"),
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("isActive", () => {
@@ -130,13 +144,21 @@ describe("isActive", () => {
     expect(isActive(flight, new Date("2026-01-30T02:00:00Z"))).toBe(false);
     expect(isActive(flight, new Date("2026-01-30T12:00:00Z"))).toBe(false);
   });
-  it("is inactive once completed even inside the time window", () => {
+  it("is inactive once truly completed after departure", () => {
     expect(
       isActive(
         makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
         new Date("2026-01-30T07:00:00Z"),
       ),
     ).toBe(false);
+  });
+  it("can still be active if falsely marked completed before departure", () => {
+    expect(
+      isActive(
+        makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T04:00:00Z"),
+      ),
+    ).toBe(true);
   });
 });
 

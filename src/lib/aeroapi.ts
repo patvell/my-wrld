@@ -199,3 +199,24 @@ export async function getSchedules(
   );
   return (data.scheduled ?? []).map(normalizeSchedule).filter((s): s is AeroSchedule => s !== null);
 }
+
+/**
+ * Flights between two airports (FindFlight). Accepts IATA or ICAO airport ids.
+ * Useful as a route-lookup fallback when /schedules returns nothing for IATA filters.
+ */
+export async function getFlightsBetweenAirports(
+  origin: string,
+  destination: string,
+  opts: { start?: string; end?: string; max_pages?: number; airline?: string } = {},
+): Promise<AeroFlight[]> {
+  const params: Record<string, string> = {};
+  if (opts.start) params.start = opts.start;
+  if (opts.end) params.end = opts.end;
+  if (opts.max_pages != null) params.max_pages = String(opts.max_pages);
+  if (opts.airline) params.airline = opts.airline;
+  const data = await aeroFetch<FlightsResponse>(
+    `/airports/${encodeURIComponent(origin)}/flights/to/${encodeURIComponent(destination)}`,
+    params,
+  );
+  return data.flights ?? [];
+}

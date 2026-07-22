@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useMemo, useState, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Material } from "three";
 import type { GlobeMethods } from "react-globe.gl";
 import { Flight } from "@/types";
@@ -10,9 +10,10 @@ import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
-import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere, uniqueCityCount, computeTotalKmFlown, formatKmFlown } from "@/lib/globeUtils";
+import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere, computeWorldTravelStats } from "@/lib/globeUtils";
 import { hexToRgba, isLightBackground } from "@/lib/colors";
 import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
 const HOME_BASE = "DXB";
 const TILT_LIMIT = (35 * Math.PI) / 180;
@@ -116,6 +117,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
   const [clusterOptions, setClusterOptions] = useState<PointDatum[] | null>(null);
   const [globeInitialized, setGlobeInitialized] = useState(false);
   const [cameraPov, setCameraPov] = useState(DEFAULT_CAMERA_POV);
+  const [statsOpen, setStatsOpen] = useState(false);
 
   const syncCameraPov = useCallback(() => {
     const pov = globeRef.current?.pointOfView();
@@ -436,47 +438,46 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     [displayPoints, cameraPov],
   );
 
-  const uniqueCities = useMemo(
-    () => uniqueCityCount(Object.keys(airportStatus)),
-    [airportStatus],
-  );
-
-  const countableFlights = useMemo(
-    () => flights.filter((f) => !isReturnToHome(f)),
+  const worldStats = useMemo(
+    () =>
+      computeWorldTravelStats(flights, isPast, {
+        excludeReturnHome: isReturnToHome,
+      }),
     [flights],
-  );
-  const pastCount = useMemo(
-    () => countableFlights.filter((f) => isPast(f)).length,
-    [countableFlights],
-  );
-  const upcomingCount = countableFlights.length - pastCount;
-  const kmFlownLabel = useMemo(
-    () => formatKmFlown(computeTotalKmFlown(countableFlights, isPast)),
-    [countableFlights],
   );
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-2 pointer-events-none">
-        <span className="text-[9px] font-bold tracking-[0.25em] uppercase text-white/35">
-          Your World
-        </span>
-        <div
-          className={cn("flex items-stretch gap-3 px-5 py-2.5 border", NAV_PILL_CLASS)}
-          aria-label={`${uniqueCities} cities, ${kmFlownLabel} km flown, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
-        >
-          <StatPill value={uniqueCities} label="Cities" />
-          <div className="w-[1px] self-stretch bg-white/10" />
-          <StatPill value={kmFlownLabel} label="KM Flown" />
-          <div className="w-[1px] self-stretch bg-white/10" />
-          <StatPill value={pastCount} label="Past" />
-          {upcomingCount > 0 && (
-            <>
-              <div className="w-[1px] self-stretch bg-white/10" />
-              <StatPill value={upcomingCount} label="Upcoming" dim />
-            </>
+      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
+        <button
+          type="button"
+          onClick={() => setStatsOpen(true)}
+          className={cn(
+            "pointer-events-auto flex flex-col items-center gap-1.5 px-6 py-3 border transition-transform active:scale-[0.98]",
+            NAV_PILL_CLASS,
           )}
-        </div>
+          aria-label="Open Your World stats"
+        >
+          <span className="text-[9px] font-bold tracking-[0.25em] uppercase text-white/45">
+            Your World
+          </span>
+          <div className="flex items-stretch gap-3">
+            <StatPill value={worldStats.cities} label="Cities" />
+            <div className="w-[1px] self-stretch bg-white/10" />
+            <StatPill value={worldStats.kmFlownLabel} label="KM Flown" />
+            <div className="w-[1px] self-stretch bg-white/10" />
+            <StatPill value={worldStats.pastCount} label="Past" />
+            {worldStats.upcomingCount > 0 && (
+              <>
+                <div className="w-[1px] self-stretch bg-white/10" />
+                <StatPill value={worldStats.upcomingCount} label="Upcoming" dim />
+              </>
+            )}
+          </div>
+          <span className="text-[8px] font-bold tracking-widest uppercase text-white/25">
+            Tap for details
+          </span>
+        </button>
 
         {clusterOptions && clusterOptions.length > 1 && (
           <div
@@ -501,6 +502,75 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {statsOpen && (
+          <>
+            <motion.button
+              type="button"
+              aria-label="Close stats"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-30 bg-black/60 backdrop-blur-sm"
+              onClick={() => setStatsOpen(false)}
+            />
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="world-stats-title"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="absolute inset-x-0 bottom-0 z-40 max-h-[75vh] overflow-y-auto rounded-t-[28px] border border-white/10 bg-[#0c0c0c] px-5 pb-10 pt-4 shadow-2xl"
+            >
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+              <div className="mb-5 flex items-center justify-between">
+                <h2
+                  id="world-stats-title"
+                  className="text-sm font-black tracking-[0.2em] uppercase text-white"
+                >
+                  Your World
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setStatsOpen(false)}
+                  className="rounded-full p-2 text-white/50 hover:bg-white/10 hover:text-white"
+                  aria-label="Close"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <StatsSheetCard label="Cities" value={String(worldStats.cities)} />
+                <StatsSheetCard label="KM Flown" value={worldStats.kmFlownLabel} />
+                <StatsSheetCard label="Hours" value={worldStats.hoursFlownLabel} />
+                <StatsSheetCard label="Past Flights" value={String(worldStats.pastCount)} />
+                <StatsSheetCard
+                  label="Longest Flight"
+                  value={worldStats.longestFlight?.kmLabel ?? "—"}
+                  hint={worldStats.longestFlight?.label}
+                />
+                <StatsSheetCard
+                  label="Most Visited"
+                  value={
+                    worldStats.mostVisited
+                      ? `${worldStats.mostVisited.visits}×`
+                      : "—"
+                  }
+                  hint={
+                    worldStats.mostVisited
+                      ? `${worldStats.mostVisited.city} (${worldStats.mostVisited.code})`
+                      : undefined
+                  }
+                />
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <motion.div
         className="absolute inset-0 flex items-center justify-center"
@@ -585,6 +655,26 @@ function StatPill({
         {value}
       </span>
       <span className="text-[8px] font-bold tracking-widest uppercase text-white/40">{label}</span>
+    </div>
+  );
+}
+
+function StatsSheetCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+      <div className="text-[9px] font-bold tracking-widest uppercase text-white/40">{label}</div>
+      <div className="mt-1.5 text-2xl font-black tracking-tight text-white">{value}</div>
+      {hint ? (
+        <div className="mt-1 text-[10px] font-bold uppercase tracking-wider text-white/45">{hint}</div>
+      ) : null}
     </div>
   );
 }
