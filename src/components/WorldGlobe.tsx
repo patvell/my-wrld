@@ -10,7 +10,7 @@ import { isPast } from "@/lib/time";
 import { loadGlobeTexture } from "@/lib/createGlobeTexture";
 import Globe from "@/components/GlobeCanvas";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
-import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
+import { findNearbyAirports, computeArrivalVisitCounts, isOnVisibleHemisphere, uniqueCityCount, computeTotalKmFlown, formatKmFlown } from "@/lib/globeUtils";
 import { hexToRgba, isLightBackground } from "@/lib/colors";
 import { cn } from "@/lib/utils";
 
@@ -436,7 +436,10 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     [displayPoints, cameraPov],
   );
 
-  const uniqueAirportCount = useMemo(() => basePoints.length, [basePoints]);
+  const uniqueCities = useMemo(
+    () => uniqueCityCount(Object.keys(airportStatus)),
+    [airportStatus],
+  );
 
   const countableFlights = useMemo(
     () => flights.filter((f) => !isReturnToHome(f)),
@@ -447,20 +450,29 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
     [countableFlights],
   );
   const upcomingCount = countableFlights.length - pastCount;
+  const kmFlownLabel = useMemo(
+    () => formatKmFlown(computeTotalKmFlown(countableFlights, isPast)),
+    [countableFlights],
+  );
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-3 pointer-events-none">
+      <div className="absolute top-6 left-0 right-0 z-20 flex flex-col items-center gap-2 pointer-events-none">
+        <span className="text-[9px] font-bold tracking-[0.25em] uppercase text-white/35">
+          Your World
+        </span>
         <div
-          className={cn("flex items-center gap-4 px-5 py-2 border", NAV_PILL_CLASS)}
-          aria-label={`${uniqueAirportCount} airports, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
+          className={cn("flex items-stretch gap-3 px-5 py-2.5 border", NAV_PILL_CLASS)}
+          aria-label={`${uniqueCities} cities, ${kmFlownLabel} km flown, ${pastCount} past flights, ${upcomingCount} upcoming flights`}
         >
-          <StatPill value={uniqueAirportCount} label="Airports" />
-          <div className="w-[1px] h-3 bg-white/10" />
+          <StatPill value={uniqueCities} label="Cities" />
+          <div className="w-[1px] self-stretch bg-white/10" />
+          <StatPill value={kmFlownLabel} label="KM Flown" />
+          <div className="w-[1px] self-stretch bg-white/10" />
           <StatPill value={pastCount} label="Past" />
           {upcomingCount > 0 && (
             <>
-              <div className="w-[1px] h-3 bg-white/10" />
+              <div className="w-[1px] self-stretch bg-white/10" />
               <StatPill value={upcomingCount} label="Upcoming" dim />
             </>
           )}
@@ -563,14 +575,16 @@ function StatPill({
   label,
   dim = false,
 }: {
-  value: number;
+  value: number | string;
   label: string;
   dim?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className={cn("text-xs font-bold", dim ? "text-white/50" : "text-white")}>{value}</span>
-      <span className="text-[9px] font-bold tracking-widest uppercase text-white/40">{label}</span>
+    <div className="flex flex-col items-center gap-0.5 min-w-[3.25rem]">
+      <span className={cn("text-sm font-black tracking-tight leading-none", dim ? "text-white/50" : "text-white")}>
+        {value}
+      </span>
+      <span className="text-[8px] font-bold tracking-widest uppercase text-white/40">{label}</span>
     </div>
   );
 }

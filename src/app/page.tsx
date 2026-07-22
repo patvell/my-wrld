@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import GlobalPulse from "@/components/GlobalPulse";
 import PillMenu from "@/components/PillMenu";
@@ -10,7 +10,7 @@ import BoardingPassSkeleton from "@/components/BoardingPassSkeleton";
 import JourneyList from "@/components/JourneyList";
 import { Flight, FlightInput, PersonaMode } from "@/types";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
-import { getCurrentLocation, isPast } from "@/lib/time";
+import { getCurrentLocation, getNextLiveFlightId, isPast } from "@/lib/time";
 import { PARTNER_CITY, PARTNER_CODE } from "@/lib/config";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
@@ -56,6 +56,10 @@ export default function Home() {
 
   const upcomingFlights = useMemo(() => flights.filter((f) => !isPast(f, now)), [flights, now]);
   const upcomingJourneys = useMemo(() => groupFlightsIntoJourneys(upcomingFlights, true), [upcomingFlights]);
+  const liveFlightId = useMemo(
+    () => getNextLiveFlightId(upcomingFlights, now),
+    [upcomingFlights, now],
+  );
 
   const pastFlights = useMemo(() => flights.filter((f) => isPast(f, now)), [flights, now]);
   const pastJourneys = useMemo(() => groupFlightsIntoJourneys(pastFlights, historySortAsc), [pastFlights, historySortAsc]);
@@ -76,6 +80,14 @@ export default function Home() {
       setLoading(false);
     }
   };
+
+  const handleFlightLanded = useCallback((id: string) => {
+    setFlights((prev) =>
+      prev.map((f) =>
+        f.id === id ? { ...f, status: "completed" as const, type: "past" as const } : f,
+      ),
+    );
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -324,6 +336,8 @@ export default function Home() {
                 onDelete={handleDeleteTrip}
                 onEdit={handleEditTrip}
                 showLiveStatus
+                liveFlightId={liveFlightId}
+                onLanded={handleFlightLanded}
                 keyPrefix="upcoming"
               />
               {upcomingJourneys.length === 0 && (

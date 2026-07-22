@@ -45,6 +45,17 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     // AeroAPI lookup (autofill)
     const [aeroConfigured, setAeroConfigured] = useState(false);
     const [lookingUp, setLookingUp] = useState(false);
+    const [lookingUpRoute, setLookingUpRoute] = useState(false);
+    const [routeOptions, setRouteOptions] = useState<
+        Array<{
+            flight_number: string;
+            departure_time: string;
+            arrival_time: string;
+            day_span: number;
+            fa_flight_id?: string | null;
+            flight: FlightInput;
+        }>
+    >([]);
     // Days the arrival falls after departure (preserved when the date is moved).
     const [arrivalDayOffset, setArrivalDayOffset] = useState<number | null>(null);
     const [pendingFaFlightId, setPendingFaFlightId] = useState<string | null>(null);
@@ -69,6 +80,28 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         };
     }, [isOpen]);
 
+    const applyLookupFlight = (
+        f: FlightInput,
+        opts: { daySpan?: number; faFlightId?: string | null; baseDate?: string },
+    ) => {
+        const dep = normalizeWallClock(f.departure_time);
+        const arr = normalizeWallClock(f.arrival_time);
+        const span = opts.daySpan ?? daySpan(dep, arr);
+        const baseDate = opts.baseDate || dep.slice(0, 10) || new Date().toISOString().slice(0, 10);
+
+        setOrigin(f.origin_code);
+        setOriginDate(baseDate);
+        setOriginTime(dep.slice(11, 16));
+        setDestination(f.destination_code);
+        setDestDate(addDays(baseDate, span));
+        setDestTime(arr.slice(11, 16));
+        setArrivalDayOffset(span);
+        setPendingFaFlightId(opts.faFlightId ?? null);
+        if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
+        setErrors({});
+        setRouteOptions([]);
+    };
+
     const handleLookup = async () => {
         const digits = flightNum.replace(/\D/g, "");
         if (!digits) {
@@ -79,6 +112,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         // departure date if present, otherwise today, to pick the schedule.
         const lookupDate = originDate || new Date().toISOString().slice(0, 10);
         setLookingUp(true);
+        setRouteOptions([]);
         try {
             const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: lookupDate });
             if (isHistoryMode) params.set("prefer_history", "1");
@@ -95,24 +129,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 return;
             }
             const f = data.flight as FlightInput;
-            const dep = normalizeWallClock(f.departure_time);
-            const arr = normalizeWallClock(f.arrival_time);
-            const span = typeof data.day_span === "number" ? data.day_span : daySpan(dep, arr);
-
-            // Keep the user's chosen departure date (they often book a month out,
-            // beyond AeroAPI's horizon). Fill route + times from the schedule and
-            // derive the arrival date from the overnight day-span.
-            const baseDate = lookupDate;
-            setOrigin(f.origin_code);
-            setOriginDate(baseDate);
-            setOriginTime(dep.slice(11, 16));
-            setDestination(f.destination_code);
-            setDestDate(addDays(baseDate, span));
-            setDestTime(arr.slice(11, 16));
-            setArrivalDayOffset(span);
-            setPendingFaFlightId(data.fa_flight_id ?? null);
-            if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
-            setErrors({});
+            const span = typeof data.day_span === "number" ? data.day_span : undefined;
+            applyLookupFlight(f, {
+                daySpan: span,
+                faFlightId: data.fa_flight_id ?? null,
+                baseDate: lookupDate,
+            });
 
             const route = `${f.origin_code} → ${f.destination_code}`;
             if (data.source === "schedule") {
@@ -133,6 +155,68 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         } finally {
             setLookingUp(false);
         }
+    };
+
+    const handleRouteLookup = async () => {
+        const originCode = origin.trim().toUpperCase();
+        const destCode = destination.trim().toUpperCase();
+        if (!validateAirport(originCode) || !validateAirport(destCode)) {
+            toast.error("Enter valid departure and arrival airport codes");
+            return;
+        }
+        if (originCode === destCode) {
+            toast.error("Origin and destination must differ");
+            return;
+        }
+        const lookupDate = originDate || new Date().toISOString().slice(0, 10);
+        setLookingUpRoute(true);
+        setRouteOptions([]);
+        try {
+            const params = new URLSearchParams({
+                origin: originCode,
+                destination: destCode,
+                date: lookupDate,
+            });
+            const res = await fetch(`/api/aeroapi/route-lookup?${params.toString()}`);
+            if (!res.ok) throw new Error("Route lookup failed");
+            const data = await res.json();
+            if (!data.configured) {
+                toast.error("Flight lookup is not configured");
+                setAeroConfigured(false);
+                return;
+            }
+            if (!data.found || !Array.isArray(data.flights) || data.flights.length === 0) {
+                toast.error("No Emirates flights found for that route and date");
+                return;
+            }
+            const options = data.flights as typeof routeOptions;
+            if (options.length === 1) {
+                const opt = options[0];
+                applyLookupFlight(opt.flight, {
+                    daySpan: opt.day_span,
+                    faFlightId: opt.fa_flight_id ?? null,
+                    baseDate: lookupDate,
+                });
+                toast.success(`Found ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`);
+                return;
+            }
+            setRouteOptions(options);
+            toast.success(`${options.length} flights found — pick one`);
+        } catch {
+            toast.error("Could not find flights for that route");
+        } finally {
+            setLookingUpRoute(false);
+        }
+    };
+
+    const selectRouteOption = (opt: (typeof routeOptions)[number]) => {
+        const lookupDate = originDate || opt.departure_time.slice(0, 10);
+        applyLookupFlight(opt.flight, {
+            daySpan: opt.day_span,
+            faFlightId: opt.fa_flight_id ?? null,
+            baseDate: lookupDate,
+        });
+        toast.success(`Selected ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`);
     };
 
     // Focus management: trap focus while open, close on Escape, restore on close.
@@ -194,6 +278,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestTime(arr.slice(11, 16));
                 setArrivalDayOffset(daySpan(dep, arr));
                 setPendingFaFlightId(flightToEdit.fa_flight_id ?? null);
+                setRouteOptions([]);
 
                 setErrors({});
             } else {
@@ -208,6 +293,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestTime("");
                 setArrivalDayOffset(null);
                 setPendingFaFlightId(null);
+                setRouteOptions([]);
                 setErrors({});
             }
         }
@@ -411,6 +497,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={origin}
                                                     onChange={(e) => {
                                                         setOrigin(e.target.value);
+                                                        setRouteOptions([]);
                                                         if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
                                                     }}
                                                     maxLength={3}
@@ -430,7 +517,10 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     id="origin-date"
                                                     type="date"
                                                     value={originDate}
-                                                    onChange={(e) => handleOriginDateChange(e.target.value)}
+                                                    onChange={(e) => {
+                                                        handleOriginDateChange(e.target.value);
+                                                        setRouteOptions([]);
+                                                    }}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
                                                     required
                                                 />
@@ -474,6 +564,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={destination}
                                                     onChange={(e) => {
                                                         setDestination(e.target.value);
+                                                        setRouteOptions([]);
                                                         if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
                                                     }}
                                                     maxLength={3}
@@ -521,6 +612,51 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                         </div>
                                     </div>
                                 </div>
+
+                                {aeroConfigured && (
+                                    <div className="flex flex-col gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleRouteLookup}
+                                            disabled={lookingUpRoute || lookingUp}
+                                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                        >
+                                            {lookingUpRoute ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <Search size={14} />
+                                            )}
+                                            {lookingUpRoute ? "Finding flights..." : "Find flights for route"}
+                                        </button>
+
+                                        {routeOptions.length > 1 && (
+                                            <div
+                                                className="rounded-2xl border border-white/10 bg-white/[0.03] p-2 max-h-48 overflow-y-auto custom-scrollbar"
+                                                role="listbox"
+                                                aria-label="Matching flights"
+                                            >
+                                                {routeOptions.map((opt) => (
+                                                    <button
+                                                        key={`${opt.flight_number}-${opt.departure_time}`}
+                                                        type="button"
+                                                        role="option"
+                                                        onClick={() => selectRouteOption(opt)}
+                                                        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                                    >
+                                                        <span className="text-sm font-black tracking-tight text-white">
+                                                            {opt.flight_number}
+                                                        </span>
+                                                        <span className="text-xs font-bold font-mono text-white/60">
+                                                            {opt.departure_time.slice(11, 16)}
+                                                            <span className="text-white/30 mx-1.5">→</span>
+                                                            {opt.arrival_time.slice(11, 16)}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <button
                                     type="submit"

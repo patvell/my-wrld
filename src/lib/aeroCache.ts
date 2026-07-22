@@ -34,4 +34,4 @@ export async function setCached(key: string, payload: unknown): Promise<void> {
 }
 
 export const LOOKUP_TTL_MS = 12 * 60 * 60 * 1000; // schedules are stable: 12h
-export const STATUS_TTL_MS = 90 * 1000; // live status: 90s
+export const STATUS_TTL_MS = 30 * 1000; // live status: 30s

@@ -74,18 +74,40 @@ export function arrivalInstant(flight: Flight): Date {
   return toInstant(flight.arrival_time, flight.destination_code);
 }
 
-/** A flight is "past" (belongs in History) once it landed more than 2h ago. */
+/**
+ * A flight is "past" (belongs in History) when AeroAPI has confirmed it
+ * completed/cancelled, or — as a fallback for never-tracked flights — once
+ * scheduled arrival was more than 2h ago.
+ */
 export function isPast(flight: Flight, now: Date = new Date()): boolean {
+  if (flight.status === "completed" || flight.status === "cancelled") return true;
   return now.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
 }
 
 /** Live-tracking window: from 3h before departure until 2h after arrival. */
 export function isActive(flight: Flight, now: Date = new Date()): boolean {
+  if (flight.status === "completed" || flight.status === "cancelled") return false;
   const t = now.getTime();
   return (
     t >= departureInstant(flight).getTime() - LIVE_BEFORE_MS &&
     t <= arrivalInstant(flight).getTime() + LIVE_AFTER_MS
   );
+}
+
+/**
+ * Among upcoming flights, the soonest departure currently inside the live
+ * window — only this flight should poll/highlight as active.
+ */
+export function getNextLiveFlightId(
+  flights: Flight[],
+  now: Date = new Date(),
+): string | null {
+  const candidates = flights
+    .filter((f) => !isPast(f, now) && isActive(f, now))
+    .sort(
+      (a, b) => departureInstant(a).getTime() - departureInstant(b).getTime(),
+    );
+  return candidates[0]?.id ?? null;
 }
 
 /** True when departure is within the next 24h (and hasn't happened yet). */

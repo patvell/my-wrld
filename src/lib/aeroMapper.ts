@@ -60,6 +60,69 @@ export function pickFlightForDate(flights: AeroFlight[], date: string): AeroFlig
   });
 }
 
+/** Prefer flights whose origin/destination IATA match the stored route. */
+export function filterFlightsByRoute(
+  flights: AeroFlight[],
+  originCode: string,
+  destinationCode: string,
+): AeroFlight[] {
+  const origin = originCode.toUpperCase();
+  const dest = destinationCode.toUpperCase();
+  const matched = flights.filter(
+    (f) =>
+      (f.origin?.code_iata ?? "").toUpperCase() === origin &&
+      (f.destination?.code_iata ?? "").toUpperCase() === dest,
+  );
+  return matched.length > 0 ? matched : flights;
+}
+
+const MAX_PLAUSIBLE_DELAY_MIN = 12 * 60; // hide absurd delay values from bad matches
+
+/** Clamp AeroAPI delay seconds → minutes; null if missing or implausible. */
+export function plausibleDelayMin(delaySeconds: number | null | undefined): number | null {
+  if (delaySeconds == null) return null;
+  const min = Math.round(delaySeconds / 60);
+  if (Math.abs(min) > MAX_PLAUSIBLE_DELAY_MIN) return null;
+  return min;
+}
+
+/**
+ * Map raw AeroAPI status strings into short card labels.
+ * Never surfaces "Result Unknown" or similar opaque API text.
+ */
+export function formatLiveStatusLabel(
+  status: string | null | undefined,
+  opts: { cancelled?: boolean; progressPercent?: number | null; actualIn?: string | null } = {},
+): string {
+  if (opts.cancelled) return "Cancelled";
+  if (opts.actualIn) return "Arrived";
+
+  const raw = (status ?? "").trim().toLowerCase();
+  if (!raw || raw.includes("unknown") || raw.includes("result unknown")) {
+    const p = opts.progressPercent;
+    if (p != null && p >= 100) return "Arrived";
+    if (p != null && p > 0) return "En Route";
+    return "Live";
+  }
+  if (raw.includes("cancel")) return "Cancelled";
+  if (raw.includes("arriv") || raw.includes("landed") || raw.includes("completed")) return "Arrived";
+  if (raw.includes("en route") || raw.includes("enroute") || raw.includes("airborne")) return "En Route";
+  if (raw.includes("departed") || raw.includes("takeoff") || raw.includes("taken off")) return "Departed";
+  if (raw.includes("board") || raw.includes("taxi") || raw.includes("gate")) return "Boarding";
+  if (raw.includes("schedul") || raw.includes("filed")) return "Scheduled";
+  if (raw.includes("delay")) return "Delayed";
+
+  // Title-case a short known-looking status; otherwise fall back.
+  if (raw.length <= 24 && !/[^a-z0-9\s/-]/i.test(status ?? "")) {
+    return (status ?? "")
+      .trim()
+      .split(/\s+/)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  }
+  return "Live";
+}
+
 /**
  * Map an AeroAPI flight to a FlightInput (origin/destination + canonical
  * wall-clock times). Returns null if essential fields (IATA codes, times) are
@@ -154,17 +217,28 @@ export function mapAeroFlightToStatus(f: AeroFlight): LiveStatus {
   const toLocal = (v: string | null | undefined, tz: string) =>
     v ? instantToWallClockTz(v, tz) : null;
 
+  const progress =
+    f.progress_percent != null
+      ? Math.max(0, Math.min(100, Math.round(f.progress_percent)))
+      : null;
+  const actualIn = toLocal(f.actual_in, destTz);
+  const cancelled = Boolean(f.cancelled);
+
   return {
     fa_flight_id: f.fa_flight_id,
-    status: f.status ?? null,
-    progress_percent: f.progress_percent ?? null,
-    cancelled: Boolean(f.cancelled),
-    departure_delay_min: f.departure_delay != null ? Math.round(f.departure_delay / 60) : null,
-    arrival_delay_min: f.arrival_delay != null ? Math.round(f.arrival_delay / 60) : null,
+    status: formatLiveStatusLabel(f.status, {
+      cancelled,
+      progressPercent: progress,
+      actualIn,
+    }),
+    progress_percent: progress,
+    cancelled,
+    departure_delay_min: plausibleDelayMin(f.departure_delay),
+    arrival_delay_min: plausibleDelayMin(f.arrival_delay),
     estimated_out: toLocal(f.estimated_out, originTz),
     actual_out: toLocal(f.actual_out, originTz),
     estimated_in: toLocal(f.estimated_in, destTz),
-    actual_in: toLocal(f.actual_in, destTz),
+    actual_in: actualIn,
     gate_origin: f.gate_origin ?? null,
     gate_destination: f.gate_destination ?? null,
     terminal_origin: f.terminal_origin ?? null,

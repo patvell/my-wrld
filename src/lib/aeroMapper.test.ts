@@ -103,6 +103,20 @@ describe("mapAeroFlightToStatus", () => {
     expect(s.gate_destination).toBe("A12");
     expect(s.fa_flight_id).toBe("UAE5-1700000000-airline-0");
   });
+
+  it("sanitizes Result Unknown and clamps absurd delays", () => {
+    const s = mapAeroFlightToStatus(
+      aeroFlight({
+        status: "Result Unknown",
+        progress_percent: 55,
+        arrival_delay: -90_000, // 1500 min — beyond 12h plausible window
+        departure_delay: 60,
+      }),
+    );
+    expect(s.status).toBe("En Route");
+    expect(s.arrival_delay_min).toBeNull();
+    expect(s.departure_delay_min).toBe(1);
+  });
 });
 
 describe("mapAeroScheduleToInput", () => {

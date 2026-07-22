@@ -175,15 +175,24 @@ export async function getHistoricalFlightsByIdent(
   return data.flights ?? [];
 }
 
-/** Fetch published airline schedules for a date range, optionally filtered by carrier. */
+/** Fetch published airline schedules for a date range, optionally filtered by carrier/route. */
 export async function getSchedules(
   dateStart: string,
   dateEnd: string,
-  opts: { airline?: string; flight_number?: string } = {},
+  opts: {
+    airline?: string;
+    flight_number?: string;
+    origin?: string;
+    destination?: string;
+    max_pages?: number;
+  } = {},
 ): Promise<AeroSchedule[]> {
   const params: Record<string, string> = {};
   if (opts.airline) params.airline = opts.airline;
   if (opts.flight_number) params.flight_number = opts.flight_number;
+  if (opts.origin) params.origin = opts.origin;
+  if (opts.destination) params.destination = opts.destination;
+  if (opts.max_pages != null) params.max_pages = String(opts.max_pages);
   const data = await aeroFetch<SchedulesResponse>(
     `/schedules/${dateStart}/${dateEnd}`,
     params,

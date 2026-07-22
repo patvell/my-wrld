@@ -15,9 +15,13 @@ interface BoardingPassProps {
     isShifted?: boolean;
     onToggleShift?: () => void;
     isActive?: boolean;
+    /** Called when status polling confirms the flight has landed/cancelled. */
+    onLanded?: (id: string) => void;
 }
 
-export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false }: BoardingPassProps) {
+const STATUS_POLL_MS = 30 * 1000;
+
+export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false, onLanded }: BoardingPassProps) {
     const { isFullExperience } = usePerformanceTier();
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [live, setLive] = useState<LiveStatus | null>(null);
@@ -27,8 +31,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     const past = isPast(flight);
 
     // While the flight is in its live window, pull real status from AeroAPI
-    // (server-cached). Fetch on activation, then refresh slowly; setState only
-    // happens inside the async callback. No-op gracefully if not configured.
+    // (server-cached). Fetch on activation, then refresh every ~30s.
     useEffect(() => {
         if (!isActive) return;
         let active = true;
@@ -37,18 +40,20 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 const res = await fetch(`/api/flights/${flight.id}/status`);
                 if (!res.ok) return;
                 const data = await res.json();
-                if (active && data?.configured && data?.found) setLive(data.status as LiveStatus);
+                if (!active) return;
+                if (data?.configured && data?.found) setLive(data.status as LiveStatus);
+                if (data?.landed) onLanded?.(flight.id);
             } catch {
                 /* ignore: keep static UI */
             }
         };
         load();
-        const timer = setInterval(load, 90 * 1000);
+        const timer = setInterval(load, STATUS_POLL_MS);
         return () => {
             active = false;
             clearInterval(timer);
         };
-    }, [isActive, flight.id]);
+    }, [isActive, flight.id, onLanded]);
 
     const cancelled = Boolean(live?.cancelled);
 

@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { Flight } from "@/types";
-import { computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
+import {
+  computeArrivalVisitCounts,
+  isOnVisibleHemisphere,
+  normalizeCityName,
+  uniqueCityCount,
+  computeTotalKmFlown,
+  formatKmFlown,
+  geoDistanceKm,
+} from "@/lib/globeUtils";
 
 function makeFlight(overrides: Partial<Flight>): Flight {
   return {
@@ -50,6 +58,42 @@ describe("computeArrivalVisitCounts", () => {
     ];
     const counts = computeArrivalVisitCounts(flights, isPast);
     expect(counts.DXB).toBe(1);
+  });
+});
+
+describe("city helpers", () => {
+  it("normalizes London airport city names", () => {
+    expect(normalizeCityName("London Heathrow")).toBe("London");
+    expect(normalizeCityName("London Gatwick")).toBe("London");
+    expect(normalizeCityName("Dubai")).toBe("Dubai");
+  });
+
+  it("counts unique metros not airports", () => {
+    expect(uniqueCityCount(["LHR", "LGW", "DXB"])).toBe(2);
+  });
+});
+
+describe("km flown", () => {
+  const isPast = (f: Flight) => f.type === "past";
+
+  it("sums haversine distance for past flights", () => {
+    const flights = [
+      makeFlight({ origin_code: "DXB", destination_code: "LHR", type: "past" }),
+      makeFlight({ origin_code: "DXB", destination_code: "BLR", type: "future" }),
+    ];
+    const total = computeTotalKmFlown(flights, isPast);
+    const expected = geoDistanceKm(
+      25.2527999878,
+      55.3643989563,
+      51.4706001282,
+      -0.4619410038,
+    );
+    expect(total).toBeCloseTo(expected, 0);
+  });
+
+  it("formats km with unit left to the label", () => {
+    expect(formatKmFlown(850)).toBe("850");
+    expect(formatKmFlown(232400)).toBe("232.4K");
   });
 });
 

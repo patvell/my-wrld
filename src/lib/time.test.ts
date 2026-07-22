@@ -8,6 +8,7 @@ import {
   instantToWallClock,
   isPast,
   isActive,
+  getNextLiveFlightId,
   isLayoverBetween,
   getCurrentLocation,
   formatLocalTime,
@@ -102,6 +103,21 @@ describe("isPast", () => {
     expect(isPast(flight, new Date("2026-01-30T10:00:00Z"))).toBe(false); // 1h after arrival
     expect(isPast(flight, new Date("2026-01-30T12:00:00Z"))).toBe(true); // 3h after arrival
   });
+
+  it("treats completed/cancelled status as past immediately", () => {
+    expect(
+      isPast(
+        makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T09:30:00Z"),
+      ),
+    ).toBe(true);
+    expect(
+      isPast(
+        makeFlight({ status: "cancelled", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T07:00:00Z"),
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("isActive", () => {
@@ -113,6 +129,35 @@ describe("isActive", () => {
   it("is inactive before and after the window", () => {
     expect(isActive(flight, new Date("2026-01-30T02:00:00Z"))).toBe(false);
     expect(isActive(flight, new Date("2026-01-30T12:00:00Z"))).toBe(false);
+  });
+  it("is inactive once completed even inside the time window", () => {
+    expect(
+      isActive(
+        makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T07:00:00Z"),
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("getNextLiveFlightId", () => {
+  it("returns the soonest upcoming flight in the live window", () => {
+    const a = makeFlight({
+      id: "a",
+      departure_time: "2026-01-30T10:00",
+      arrival_time: "2026-01-30T13:00",
+      destination_code: "DXB",
+      destination_city: "Dubai",
+    });
+    const b = makeFlight({
+      id: "b",
+      departure_time: "2026-01-30T14:00",
+      arrival_time: "2026-01-30T17:00",
+      destination_code: "DXB",
+      destination_city: "Dubai",
+    });
+    // 08:00Z = 12:00 DXB — a is mid-flight (active), b not yet in window
+    expect(getNextLiveFlightId([b, a], new Date("2026-01-30T08:00:00Z"))).toBe("a");
   });
 });
 
