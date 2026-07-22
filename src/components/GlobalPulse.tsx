@@ -9,6 +9,7 @@ import { getReadableTextColors } from "@/lib/colors";
 import { PERSONA_SPRING, PLACE_TRANSITION_CSS } from "@/lib/placeTransition";
 import { spring, hapticTap } from "@/lib/motion";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
+import { cn } from "@/lib/utils";
 
 interface GlobalPulseProps {
     partnerCity?: string;
@@ -18,6 +19,8 @@ interface GlobalPulseProps {
     persona: PersonaMode;
     onTogglePersona: () => void;
     isLoading?: boolean;
+    /** When false, interactive chrome cannot receive pointer/keyboard events (inactive tabs). */
+    interactive?: boolean;
 }
 
 function msUntilNextMinute() {
@@ -128,6 +131,7 @@ export default function GlobalPulse({
     persona,
     onTogglePersona,
     isLoading = false,
+    interactive = true,
 }: GlobalPulseProps) {
     const { isFullExperience, prefersReducedMotion } = usePerformanceTier();
     const now = useMinuteClock();
@@ -182,7 +186,12 @@ export default function GlobalPulse({
                 paddingTop: "calc(max(env(safe-area-inset-top, 0px), 40px) + 24px)",
             }}
         >
-            <div className="flex flex-col items-center justify-center w-full max-w-lg pointer-events-auto">
+            <div
+                className={cn(
+                    "flex flex-col items-center justify-center w-full max-w-lg",
+                    interactive && "pointer-events-auto",
+                )}
+            >
                 {/* Only the perspective label + location crossfade on toggle;
                     the clock and date below stay mounted so the digits roll
                     to the new timezone instead of two clocks overlapping. */}
@@ -291,17 +300,24 @@ export default function GlobalPulse({
                       }
                     : {})}
                 type="button"
+                disabled={!interactive}
+                tabIndex={interactive ? 0 : -1}
                 onClick={() => {
+                    if (!interactive) return;
                     hapticTap();
                     onTogglePersona();
                 }}
                 aria-pressed={persona === "home"}
+                aria-hidden={!interactive}
                 aria-label={
                     persona === "plane"
                         ? `Switch to home view (${partnerCity})`
                         : `Switch to traveler view (${faCity})`
                 }
-                className="cursor-pointer group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 pointer-events-auto shadow-lg shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                className={cn(
+                    "group relative overflow-hidden rounded-full glass-dark border px-6 py-3 flex items-center gap-4 transition-all hover:bg-black/40 shadow-lg shadow-black/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
+                    interactive ? "cursor-pointer pointer-events-auto" : "pointer-events-none",
+                )}
                 style={{
                     borderColor: useFrostedChrome ? "rgba(255,255,255,0.15)" : subTextColor,
                     transition: `color ${PLACE_TRANSITION_CSS}, border-color ${PLACE_TRANSITION_CSS}`,

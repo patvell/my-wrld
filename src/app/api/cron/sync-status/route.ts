@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const db = await getDb();
     const rows = await db.execute(
       `SELECT id, user_id, flight_number, departure_time, arrival_time,
-              origin_code, destination_code, fa_flight_id
+              origin_code, destination_code, fa_flight_id, status
        FROM flights
        WHERE status = 'scheduled' OR status IS NULL`,
     );
@@ -46,8 +46,11 @@ export async function GET(request: Request) {
         flight_number: r.flight_number as string | null,
         departure_time: String(r.departure_time),
         fa_flight_id: r.fa_flight_id as string | null,
+        origin_code: r.origin_code != null ? String(r.origin_code) : null,
+        destination_code: r.destination_code != null ? String(r.destination_code) : null,
+        status: r.status != null ? String(r.status) : null,
       });
-      if (result.status && (result.status.cancelled || result.status.actual_in)) {
+      if (result.landed) {
         landedOrCancelled += 1;
       }
     }

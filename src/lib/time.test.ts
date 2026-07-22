@@ -8,10 +8,13 @@ import {
   instantToWallClock,
   isPast,
   isActive,
+  getNextLiveFlightId,
   isLayoverBetween,
   getCurrentLocation,
   formatLocalTime,
   formatLocalDate,
+  formatWallClockInTimezone,
+  wallClockDayOffset,
 } from "@/lib/time";
 
 function makeFlight(overrides: Partial<Flight>): Flight {
@@ -96,37 +99,48 @@ describe("instantToWallClock", () => {
 });
 
 describe("isPast", () => {
-  const flight = makeFlight({ destination_code: "DXB", destination_city: "Dubai" }); // dep 10:00 DXB -> 06:00Z; arr 13:00 DXB -> 09:00Z, +2h -> 11:00Z
+  const flight = makeFlight({ destination_code: "DXB", destination_city: "Dubai" }); // arr 13:00 DXB -> 09:00Z, +2h -> 11:00Z
 
   it("is past only after 2h past arrival", () => {
     expect(isPast(flight, new Date("2026-01-30T10:00:00Z"))).toBe(false); // 1h after arrival
     expect(isPast(flight, new Date("2026-01-30T12:00:00Z"))).toBe(true); // 3h after arrival
   });
 
-  it("moves to History as soon as the flight is confirmed completed after departure", () => {
-    const landedEarly = makeFlight({
-      destination_code: "DXB",
-      destination_city: "Dubai",
-      status: "completed",
-    });
-    // Mid-window (30min before scheduled arrival) but FlightAware says landed.
-    expect(isPast(landedEarly, new Date("2026-01-30T08:30:00Z"))).toBe(true);
+  it("treats completed/cancelled status as past immediately", () => {
+    expect(
+      isPast(
+        makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T09:30:00Z"),
+      ),
+    ).toBe(true);
+    expect(
+      isPast(
+        makeFlight({ status: "cancelled", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T07:00:00Z"),
+      ),
+    ).toBe(true);
   });
 
-  it("ignores a stale completed status when departure is still in the future", () => {
-    const staleCompleted = makeFlight({
-      destination_code: "DXB",
-      destination_city: "Dubai",
-      status: "completed",
-    });
-    // An hour before departure (06:00Z): a completed status can't be real yet.
-    expect(isPast(staleCompleted, new Date("2026-01-30T05:00:00Z"))).toBe(false);
+  it("does not treat premature completed as past before departure", () => {
+    // dep 10:00 DXB = 06:00Z — at 04:00Z departure has not happened yet
+    expect(
+      isPast(
+        makeFlight({
+          status: "completed",
+          destination_code: "DXB",
+          destination_city: "Dubai",
+        }),
+        new Date("2026-01-30T04:00:00Z"),
+      ),
+    ).toBe(false);
   });
 
-  it("still uses the time fallback for scheduled flights without live data", () => {
-    const scheduled = makeFlight({ destination_code: "DXB", destination_city: "Dubai", status: "scheduled" });
-    expect(isPast(scheduled, new Date("2026-01-30T10:00:00Z"))).toBe(false);
-    expect(isPast(scheduled, new Date("2026-01-30T12:00:00Z"))).toBe(true);
+  it("ignores Array.filter index passed as the 2nd argument", () => {
+    // Regression: .filter(isPast) was calling isPast(flight, index)
+    expect(() => [flight].filter(isPast as (f: Flight) => boolean)).not.toThrow();
+    expect([flight].filter(isPast as (f: Flight) => boolean).length).toBe(
+      isPast(flight) ? 1 : 0,
+    );
   });
 });
 
@@ -139,6 +153,43 @@ describe("isActive", () => {
   it("is inactive before and after the window", () => {
     expect(isActive(flight, new Date("2026-01-30T02:00:00Z"))).toBe(false);
     expect(isActive(flight, new Date("2026-01-30T12:00:00Z"))).toBe(false);
+  });
+  it("is inactive once truly completed after departure", () => {
+    expect(
+      isActive(
+        makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T07:00:00Z"),
+      ),
+    ).toBe(false);
+  });
+  it("can still be active if falsely marked completed before departure", () => {
+    expect(
+      isActive(
+        makeFlight({ status: "completed", destination_code: "DXB", destination_city: "Dubai" }),
+        new Date("2026-01-30T04:00:00Z"),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("getNextLiveFlightId", () => {
+  it("returns the soonest upcoming flight in the live window", () => {
+    const a = makeFlight({
+      id: "a",
+      departure_time: "2026-01-30T10:00",
+      arrival_time: "2026-01-30T13:00",
+      destination_code: "DXB",
+      destination_city: "Dubai",
+    });
+    const b = makeFlight({
+      id: "b",
+      departure_time: "2026-01-30T14:00",
+      arrival_time: "2026-01-30T17:00",
+      destination_code: "DXB",
+      destination_city: "Dubai",
+    });
+    // 08:00Z = 12:00 DXB — a is mid-flight (active), b not yet in window
+    expect(getNextLiveFlightId([b, a], new Date("2026-01-30T08:00:00Z"))).toBe("a");
   });
 });
 
@@ -179,5 +230,29 @@ describe("formatters", () => {
   });
   it("formats date exactly as entered", () => {
     expect(formatLocalDate("2026-01-30T03:40")).toBe("JAN 30 2026");
+  });
+});
+
+describe("formatWallClockInTimezone", () => {
+  it("converts STN local arrival into YUL (Eastern) time", () => {
+    // 2026-07-22: London BST (UTC+1), Montreal EDT (UTC−4)
+    // 12:55 BST = 11:55 UTC = 07:55 EDT
+    const converted = formatWallClockInTimezone(
+      "2026-07-22T12:55",
+      "STN",
+      "America/Montreal",
+    );
+    expect(converted.time).toBe("07:55");
+    expect(converted.date).toBe("2026-07-22");
+  });
+
+  it("reports a day offset when the converted calendar day differs", () => {
+    // DXB 02:15 Asia/Dubai (UTC+4) = 22:15 previous day in Montreal (EDT UTC−4)
+    expect(
+      wallClockDayOffset("2026-07-22T02:15", "DXB", "America/Montreal"),
+    ).toBe(-1);
+    expect(
+      formatWallClockInTimezone("2026-07-22T02:15", "DXB", "America/Montreal").time,
+    ).toBe("18:15");
   });
 });

@@ -4,7 +4,7 @@ import React from "react";
 import { AnimatePresence, motion, useDragControls, type PanInfo } from "framer-motion";
 import { X } from "lucide-react";
 import type { TravelStats } from "@/lib/stats";
-import { formatDistanceKm } from "@/lib/stats";
+import { formatCompactCount, formatDistanceKm } from "@/lib/stats";
 import { spring } from "@/lib/motion";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 
@@ -93,13 +93,16 @@ export default function WorldStatsSheet({ open, onClose, stats, destinations }: 
             </div>
 
             <div className="flex-1 overflow-y-auto no-scrollbar px-5 py-5 flex flex-col gap-6">
-              <div className="grid grid-cols-3 gap-2">
-                <Stat value={String(stats.flights)} label="Flights" />
-                <Stat value={String(stats.airports)} label="Airports" />
-                <Stat value={String(stats.cities)} label="Cities" />
-                <Stat value={String(stats.countries)} label="Countries" />
-                <Stat value={`${stats.hoursInAir}H`} label="In Air" />
-                <Stat value={formatDistanceKm(stats.distanceKm)} label="Flown" />
+              <div className="flex flex-col gap-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <Stat value={String(stats.flights)} label="Flights" />
+                  <Stat value={String(stats.airports)} label="Airports" />
+                  <Stat value={String(stats.countries)} label="Countries" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Stat value={String(stats.hoursInAir)} label="Hrs Flown" />
+                  <Stat value={formatCompactCount(stats.distanceKm)} label="KM Flown" />
+                </div>
               </div>
 
               {(stats.longestFlightRoute || stats.mostVisitedCity) && (

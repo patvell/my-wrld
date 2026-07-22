@@ -75,30 +75,47 @@ export function arrivalInstant(flight: Flight): Date {
 }
 
 /**
- * A flight is "past" (belongs in History) when either:
- *  - FlightAware (or the user logging a historic trip) marked it completed and
- *    its departure has actually passed — the departure guard keeps a stale
- *    completed status from stranding a flight that was edited to a future
- *    date; or
- *  - the time fallback: it landed more than 2h ago.
+ * A flight is "past" (History) when:
+ * - cancelled, or
+ * - marked completed AND departure has already happened (guards false AeroAPI matches), or
+ * - scheduled arrival was more than 2h ago (fallback for never-tracked flights).
  */
 export function isPast(flight: Flight, now: Date = new Date()): boolean {
-  if (
-    flight.status === "completed" &&
-    now.getTime() >= departureInstant(flight).getTime()
-  ) {
-    return true;
+  // Guard: Array.filter/map pass an index as the 2nd arg — ignore non-Dates.
+  const t = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  if (flight.status === "cancelled") return true;
+  if (flight.status === "completed") {
+    // Do not trust a premature "completed" while still before departure.
+    return t.getTime() >= departureInstant(flight).getTime();
   }
-  return now.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
+  return t.getTime() >= arrivalInstant(flight).getTime() + PAST_AFTER_MS;
 }
 
 /** Live-tracking window: from 3h before departure until 2h after arrival. */
 export function isActive(flight: Flight, now: Date = new Date()): boolean {
-  const t = now.getTime();
+  const t = now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date();
+  if (isPast(flight, t)) return false;
+  const ms = t.getTime();
   return (
-    t >= departureInstant(flight).getTime() - LIVE_BEFORE_MS &&
-    t <= arrivalInstant(flight).getTime() + LIVE_AFTER_MS
+    ms >= departureInstant(flight).getTime() - LIVE_BEFORE_MS &&
+    ms <= arrivalInstant(flight).getTime() + LIVE_AFTER_MS
   );
+}
+
+/**
+ * Among upcoming flights, the soonest departure currently inside the live
+ * window — only this flight should poll/highlight as active.
+ */
+export function getNextLiveFlightId(
+  flights: Flight[],
+  now: Date = new Date(),
+): string | null {
+  const candidates = flights
+    .filter((f) => !isPast(f, now) && isActive(f, now))
+    .sort(
+      (a, b) => departureInstant(a).getTime() - departureInstant(b).getTime(),
+    );
+  return candidates[0]?.id ?? null;
 }
 
 /** True when departure is within the next 24h (and hasn't happened yet). */
@@ -194,4 +211,37 @@ export function formatLocalDate(value: string): string {
     })
     .toUpperCase()
     .replace(",", "");
+}
+
+/**
+ * Translate an airport-local wall clock into another IANA timezone.
+ * Returns HH:mm and YYYY-MM-DD in the target zone.
+ */
+export function formatWallClockInTimezone(
+  wallClock: string,
+  airportCode: string,
+  targetTz: string,
+): { time: string; date: string } {
+  const instant = toInstant(wallClock, airportCode);
+  return {
+    time: formatInTimeZone(instant, targetTz, "HH:mm"),
+    date: formatInTimeZone(instant, targetTz, "yyyy-MM-dd"),
+  };
+}
+
+/**
+ * Calendar-day delta of the converted time vs the original wall-clock date
+ * (−1 / 0 / +1 typical). Used for a tiny overnight hint on dual-time UIs.
+ */
+export function wallClockDayOffset(
+  wallClock: string,
+  airportCode: string,
+  targetTz: string,
+): number {
+  const localDate = normalizeWallClock(wallClock).slice(0, 10);
+  const { date } = formatWallClockInTimezone(wallClock, airportCode, targetTz);
+  const a = Date.parse(`${localDate}T12:00:00Z`);
+  const b = Date.parse(`${date}T12:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
 }

@@ -3,11 +3,12 @@ import { motion, AnimatePresence, type PanInfo } from "framer-motion";
 import { Flight } from "@/types";
 import { Plane, Trash2, Edit, ChevronDown, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatLocalDate, formatLocalTime, isImminent, isPast } from "@/lib/time";
+import { formatLocalDate, formatLocalTime, formatWallClockInTimezone, wallClockDayOffset, isImminent, isPast } from "@/lib/time";
 import { AIRLINE_CODE, FLIGHTAWARE_CARRIER, formatFlightDisplay } from "@/lib/config";
 import { primaryLiveStatus, type LiveStatus } from "@/lib/aeroMapper";
 import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import { spring } from "@/lib/motion";
+import { getAirportTimezone } from "@/data/airports";
 
 /** How far the card slides left to reveal the action tray. */
 const SHIFT_PX = 140;
@@ -22,9 +23,49 @@ interface BoardingPassProps {
     isShifted?: boolean;
     onToggleShift?: () => void;
     isActive?: boolean;
+    /** Called when status polling confirms the flight has landed/cancelled. */
+    onLanded?: (id: string) => void;
+    /** Selected perspective airport (GlobalPulse big clock) for secondary times. */
+    referenceCode?: string | null;
 }
 
-export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifted = false, onToggleShift, isActive = false }: BoardingPassProps) {
+const STATUS_POLL_MS = 30 * 1000;
+/** Hold action-button opacity until the card has mostly cleared the tray. */
+const ACTION_REVEAL_DELAY_S = 0.2;
+
+function SecondaryTime({
+    wallClock,
+    airportCode,
+    referenceCode,
+}: {
+    wallClock: string;
+    airportCode: string;
+    referenceCode: string;
+}) {
+    const refTz = getAirportTimezone(referenceCode);
+    const { time } = formatWallClockInTimezone(wallClock, airportCode, refTz);
+    const dayOffset = wallClockDayOffset(wallClock, airportCode, refTz);
+    const dayHint =
+        dayOffset === 0 ? null : dayOffset > 0 ? `+${dayOffset}` : `−${Math.abs(dayOffset)}`;
+
+    return (
+        <span className="mt-0.5 text-[9px] font-bold tracking-wider text-white/45 font-mono block">
+            {time} {referenceCode}
+            {dayHint ? ` ${dayHint}` : null}
+        </span>
+    );
+}
+
+export default function DigitalBoardingPass({
+    flight,
+    onDelete,
+    onEdit,
+    isShifted = false,
+    onToggleShift,
+    isActive = false,
+    onLanded,
+    referenceCode = null,
+}: BoardingPassProps) {
     const { isFullExperience } = usePerformanceTier();
     const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
     const [live, setLive] = useState<LiveStatus | null>(null);
@@ -42,8 +83,7 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
     const past = isPast(flight);
 
     // While the flight is in its live window, pull real status from AeroAPI
-    // (server-cached). Fetch on activation, then refresh slowly; setState only
-    // happens inside the async callback. No-op gracefully if not configured.
+    // (server-cached). Fetch on activation, then refresh every ~30s.
     useEffect(() => {
         if (!isActive) return;
         let active = true;
@@ -52,18 +92,20 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                 const res = await fetch(`/api/flights/${flight.id}/status`);
                 if (!res.ok) return;
                 const data = await res.json();
-                if (active && data?.configured && data?.found) setLive(data.status as LiveStatus);
+                if (!active) return;
+                if (data?.configured && data?.found) setLive(data.status as LiveStatus);
+                if (data?.landed) onLanded?.(flight.id);
             } catch {
                 /* ignore: keep static UI */
             }
         };
         load();
-        const timer = setInterval(load, 90 * 1000);
+        const timer = setInterval(load, STATUS_POLL_MS);
         return () => {
             active = false;
             clearInterval(timer);
         };
-    }, [isActive, flight.id]);
+    }, [isActive, flight.id, onLanded]);
 
     // Closing the tray always exits the confirm state too. Adjusted during
     // render (not in an effect) per the derived-state pattern, since the tray
@@ -149,8 +191,13 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
         // the old fixed-height card) and the live-details panel extends the
         // card downward when open.
         <div className="relative w-full max-w-sm group">
-            {/* Action Buttons Layer (Behind) */}
-            <div className="absolute inset-y-0 right-0 flex items-center gap-3 pr-2 z-0">
+            {/* Action tray — clipped to the revealed strip so buttons never
+                show through the translucent card while it slides. */}
+            <div
+                className="absolute inset-y-0 right-0 z-0 flex items-center justify-end gap-3 overflow-hidden pr-2"
+                style={{ width: SHIFT_PX, pointerEvents: isShifted ? "auto" : "none" }}
+                aria-hidden={!isShifted}
+            >
                 <motion.button
                     initial={false}
                     animate={{
@@ -158,7 +205,11 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         opacity: isShifted ? 1 : 0,
                         x: isShifted ? 0 : 20,
                     }}
-                    transition={{ ...spring.smooth, delay: isShifted ? 0.04 : 0 }}
+                    transition={{
+                        ...spring.smooth,
+                        opacity: { duration: 0.15, delay: isShifted ? ACTION_REVEAL_DELAY_S : 0 },
+                        delay: isShifted ? ACTION_REVEAL_DELAY_S : 0,
+                    }}
                     onClick={handleEdit}
                     aria-label={`Edit flight ${flight.origin_code} to ${flight.destination_code}`}
                     tabIndex={isShifted ? 0 : -1}
@@ -173,7 +224,11 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         opacity: isShifted ? 1 : 0,
                         x: isShifted ? 0 : 20,
                     }}
-                    transition={{ ...spring.smooth, delay: isShifted ? 0.08 : 0 }}
+                    transition={{
+                        ...spring.smooth,
+                        opacity: { duration: 0.15, delay: isShifted ? ACTION_REVEAL_DELAY_S + 0.04 : 0 },
+                        delay: isShifted ? ACTION_REVEAL_DELAY_S + 0.04 : 0,
+                    }}
                     onClick={requestDelete}
                     aria-label={`Delete flight ${flight.origin_code} to ${flight.destination_code}`}
                     tabIndex={isShifted ? 0 : -1}
@@ -221,6 +276,13 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.departure_time)}</span>
                             <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.departure_time)}</span>
+                            {isActive && referenceCode ? (
+                                <SecondaryTime
+                                    wallClock={flight.departure_time}
+                                    airportCode={flight.origin_code}
+                                    referenceCode={referenceCode}
+                                />
+                            ) : null}
                         </div>
                     </div>
 
@@ -299,6 +361,13 @@ export default function DigitalBoardingPass({ flight, onDelete, onEdit, isShifte
                         <div>
                             <span className="text-[9px] uppercase tracking-widest text-white/40 font-bold block mb-0.5">{formatLocalDate(flight.arrival_time)}</span>
                             <span className="text-2xl font-black text-white tracking-tighter font-mono leading-none">{formatLocalTime(flight.arrival_time)}</span>
+                            {isActive && referenceCode ? (
+                                <SecondaryTime
+                                    wallClock={flight.arrival_time}
+                                    airportCode={flight.destination_code}
+                                    referenceCode={referenceCode}
+                                />
+                            ) : null}
                         </div>
                     </div>
 

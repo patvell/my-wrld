@@ -15,7 +15,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const { id } = await params;
 
     const row = await db.execute({
-      sql: "SELECT id, user_id, flight_number, departure_time, fa_flight_id FROM flights WHERE id = ? AND user_id = ?",
+      sql: `SELECT id, user_id, flight_number, departure_time, fa_flight_id,
+                   origin_code, destination_code, status
+            FROM flights WHERE id = ? AND user_id = ?`,
       args: [id, userId],
     });
     if (row.rows.length === 0) {
@@ -29,6 +31,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       flight_number: flight.flight_number,
       departure_time: String(flight.departure_time),
       fa_flight_id: flight.fa_flight_id,
+      origin_code: flight.origin_code != null ? String(flight.origin_code) : null,
+      destination_code: flight.destination_code != null ? String(flight.destination_code) : null,
+      status: flight.status != null ? String(flight.status) : null,
     });
     return NextResponse.json(result);
   } catch (error) {

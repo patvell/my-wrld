@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { Flight } from "@/types";
-import { computeArrivalVisitCounts, isOnVisibleHemisphere } from "@/lib/globeUtils";
+import {
+  computeArrivalVisitCounts,
+  isOnVisibleHemisphere,
+  normalizeCityName,
+  uniqueCityCount,
+  computeTotalKmFlown,
+  formatKmFlown,
+  geoDistanceKm,
+  computeWorldTravelStats,
+} from "@/lib/globeUtils";
 
 function makeFlight(overrides: Partial<Flight>): Flight {
   return {
@@ -50,6 +59,94 @@ describe("computeArrivalVisitCounts", () => {
     ];
     const counts = computeArrivalVisitCounts(flights, isPast);
     expect(counts.DXB).toBe(1);
+  });
+});
+
+describe("city helpers", () => {
+  it("normalizes London airport city names", () => {
+    expect(normalizeCityName("London Heathrow")).toBe("London");
+    expect(normalizeCityName("London Gatwick")).toBe("London");
+    expect(normalizeCityName("Dubai")).toBe("Dubai");
+  });
+
+  it("counts unique metros not airports", () => {
+    expect(uniqueCityCount(["LHR", "LGW", "DXB"])).toBe(2);
+  });
+});
+
+describe("km flown", () => {
+  const isPast = (f: Flight) => f.type === "past";
+
+  it("sums haversine distance for past flights", () => {
+    const flights = [
+      makeFlight({ origin_code: "DXB", destination_code: "LHR", type: "past" }),
+      makeFlight({ origin_code: "DXB", destination_code: "BLR", type: "future" }),
+    ];
+    const total = computeTotalKmFlown(flights, isPast);
+    const expected = geoDistanceKm(
+      25.2527999878,
+      55.3643989563,
+      51.4706001282,
+      -0.4619410038,
+    );
+    expect(total).toBeCloseTo(expected, 0);
+  });
+
+  it("formats km with unit left to the label", () => {
+    expect(formatKmFlown(850)).toBe("850");
+    expect(formatKmFlown(232400)).toBe("232.4K");
+  });
+});
+
+describe("computeWorldTravelStats", () => {
+  it("includes hours, longest, and most visited", () => {
+    const flights = [
+      makeFlight({
+        origin_code: "DXB",
+        destination_code: "LHR",
+        departure_time: "2026-01-01T02:00",
+        arrival_time: "2026-01-01T08:00",
+        type: "past",
+        status: "completed",
+      }),
+      makeFlight({
+        origin_code: "DXB",
+        destination_code: "LHR",
+        departure_time: "2026-02-01T02:00",
+        arrival_time: "2026-02-01T08:00",
+        type: "past",
+        status: "completed",
+      }),
+      makeFlight({
+        origin_code: "DXB",
+        destination_code: "BLR",
+        departure_time: "2026-03-01T10:00",
+        arrival_time: "2026-03-01T14:00",
+        type: "past",
+        status: "completed",
+      }),
+    ];
+    // Pass bare predicate that could be confused with Array.filter arity
+    const stats = computeWorldTravelStats(flights, ((f: Flight) => f.type === "past") as (f: Flight) => boolean);
+    expect(stats.hoursFlown).toBeGreaterThan(0);
+    expect(stats.mostVisited?.code).toBe("LHR");
+    expect(stats.mostVisited?.visits).toBe(2);
+    expect(stats.longestFlight?.label).toContain("→");
+  });
+
+  it("does not crash when isPast-like fn is passed directly to filter internals", () => {
+    const flights = [
+      makeFlight({ type: "past", status: "completed" }),
+      makeFlight({ type: "future", status: "scheduled", destination_code: "LHR", departure_time: "2099-01-01T10:00", arrival_time: "2099-01-01T14:00" }),
+    ];
+    // Simulate the production bug: filter(isPast) passes index as 2nd arg
+    expect(() =>
+      computeWorldTravelStats(flights, ((f: Flight, maybeIndex?: unknown) => {
+        // Mimic isPast signature; computeWorldTravelStats must only call with flight
+        if (typeof maybeIndex === "number") throw new Error("index leaked");
+        return f.type === "past";
+      }) as (f: Flight) => boolean),
+    ).not.toThrow();
   });
 });
 

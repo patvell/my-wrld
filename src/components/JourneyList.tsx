@@ -17,8 +17,13 @@ interface JourneyListProps {
   onEdit: (id: string) => void;
   /** Whether to surface the live-tracking ("active") state on cards. */
   showLiveStatus?: boolean;
+  /** Only this flight id should poll/highlight as live (next upcoming in window). */
+  liveFlightId?: string | null;
+  onLanded?: (id: string) => void;
   /** Dim every journey after the first so the next one reads as the focus. */
   emphasizeFirst?: boolean;
+  /** Airport code for secondary times on the active card (GlobalPulse selection). */
+  referenceCode?: string | null;
   keyPrefix: string;
 }
 
@@ -30,7 +35,10 @@ export default function JourneyList({
   onDelete,
   onEdit,
   showLiveStatus = false,
+  liveFlightId = null,
+  onLanded,
   emphasizeFirst = false,
+  referenceCode = null,
   keyPrefix,
 }: JourneyListProps) {
   const { isFullExperience } = usePerformanceTier();
@@ -69,7 +77,11 @@ export default function JourneyList({
               {journey.flatMap((flight, fIdx) => {
                 const nextFlight = journey[fIdx + 1];
                 const layover = nextFlight ? isLayoverBetween(flight, nextFlight) : false;
-                const connectorActive = showLiveStatus && isFlightActive(flight, now);
+                const isLive =
+                  showLiveStatus &&
+                  liveFlightId === flight.id &&
+                  isFlightActive(flight, now);
+                const connectorActive = isLive;
                 const connectorImminent = isImminent(flight);
                 const connectorPast = isPast(flight);
 
@@ -89,7 +101,9 @@ export default function JourneyList({
                       onEdit={onEdit}
                       isShifted={activeOpenCardId === flight.id}
                       onToggleShift={() => onToggleCard(flight.id)}
-                      isActive={showLiveStatus && isFlightActive(flight, now)}
+                      isActive={isLive}
+                      onLanded={onLanded}
+                      referenceCode={referenceCode}
                     />
                   </motion.div>,
                 ];

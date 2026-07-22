@@ -439,7 +439,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
           type="button"
           onClick={() => setStatsOpen(true)}
           aria-haspopup="dialog"
-          aria-label={`Open travel stats: ${travelStats.countries} countries, ${travelStats.cities} cities, ${travelStats.flights} flights, ${formatDistanceKm(travelStats.distanceKm)} flown`}
+          aria-label={`Open travel stats: ${travelStats.flights} flights, ${travelStats.airports} airports, ${travelStats.countries} countries, ${formatDistanceKm(travelStats.distanceKm)} flown`}
           className={cn(
             "pointer-events-auto flex items-center gap-4 px-5 py-2 border transition-colors hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70",
             NAV_PILL_CLASS,

@@ -1,5 +1,9 @@
 import { getDb } from "@/lib/db";
 
+export const LOOKUP_TTL_MS = 12 * 60 * 60 * 1000; // schedules are stable: 12h
+export const STATUS_TTL_MS = 30 * 1000; // live status: 30s (matches client poll)
+export const EVICT_AFTER_MS = 2 * LOOKUP_TTL_MS; // safely past every TTL
+
 /**
  * Tiny TTL cache backed by the `aeroapi_cache` table. Used to avoid repeated
  * (billed, rate-limited) AeroAPI calls for the same lookup/status within a window.
@@ -40,7 +44,3 @@ export async function setCached(key: string, payload: unknown): Promise<void> {
     args: [cutoff],
   });
 }
-
-export const LOOKUP_TTL_MS = 12 * 60 * 60 * 1000; // schedules are stable: 12h
-export const STATUS_TTL_MS = 90 * 1000; // live status: 90s
-export const EVICT_AFTER_MS = 2 * LOOKUP_TTL_MS; // safely past every TTL

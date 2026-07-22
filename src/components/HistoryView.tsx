@@ -31,6 +31,30 @@ function StatTile({ value, label }: { value: string; label: string }) {
   );
 }
 
+/**
+ * Height-collapsing month body. Clip only while the expand/collapse tween
+ * runs — once settled, stay overflow-visible so boarding-pass shift springs
+ * are never clipped mid-close (tying overflow to activeOpenCardId caused that).
+ */
+function MonthBody({ children }: { children: React.ReactNode }) {
+  const [clipHeight, setClipHeight] = useState(true);
+  return (
+    <motion.div
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: "auto", opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: duration.base, ease: "easeInOut" }}
+      onAnimationStart={() => setClipHeight(true)}
+      onAnimationComplete={() => setClipHeight(false)}
+      className={clipHeight ? "overflow-hidden" : "overflow-visible"}
+    >
+      <div className="flex flex-col items-center gap-6 pt-1 pb-2 overflow-visible">
+        {children}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function HistoryView({
   journeys,
   flights,
@@ -133,25 +157,17 @@ export default function HistoryView({
 
             <AnimatePresence initial={false}>
               {isOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: duration.base, ease: "easeInOut" }}
-                  className="overflow-hidden"
-                >
-                  <div className="flex flex-col items-center gap-6 pt-1 pb-2">
-                    <JourneyList
-                      journeys={month.journeys}
-                      now={now}
-                      activeOpenCardId={activeOpenCardId}
-                      onToggleCard={onToggleCard}
-                      onDelete={onDelete}
-                      onEdit={onEdit}
-                      keyPrefix={`past-${month.key}`}
-                    />
-                  </div>
-                </motion.div>
+                <MonthBody>
+                  <JourneyList
+                    journeys={month.journeys}
+                    now={now}
+                    activeOpenCardId={activeOpenCardId}
+                    onToggleCard={onToggleCard}
+                    onDelete={onDelete}
+                    onEdit={onEdit}
+                    keyPrefix={`past-${month.key}`}
+                  />
+                </MonthBody>
               )}
             </AnimatePresence>
           </section>

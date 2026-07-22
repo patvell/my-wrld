@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence, useDragControls, type PanInfo } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { X, Calendar, Plane, Clock, Search, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { AIRPORTS } from "@/data/airports";
@@ -9,8 +9,6 @@ import { Flight, FlightInput } from "@/types";
 import { buildWallClock, normalizeWallClock, padTimeInput, toInstant } from "@/lib/time";
 import { daySpan } from "@/lib/aeroMapper";
 import { AIRLINE_CODE, formatFlightDigits } from "@/lib/config";
-import { spring } from "@/lib/motion";
-import { usePerformanceTier } from "@/hooks/usePerformanceTier";
 import AirportField from "@/components/AirportField";
 
 /** Add `n` whole days to a "YYYY-MM-DD" date string (UTC-safe). */
@@ -29,11 +27,6 @@ interface AddTripModalProps {
 }
 
 export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = false, flightToEdit }: AddTripModalProps) {
-    const { isMobile } = usePerformanceTier();
-    // Sheet drag-to-dismiss starts only from the header/grab-handle so it
-    // never fights with scrolling the form body.
-    const dragControls = useDragControls();
-
     // Flight Info
     const [flightNum, setFlightNum] = useState("");
 
@@ -53,6 +46,17 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
     // AeroAPI lookup (autofill)
     const [aeroConfigured, setAeroConfigured] = useState(false);
     const [lookingUp, setLookingUp] = useState(false);
+    const [lookingUpRoute, setLookingUpRoute] = useState(false);
+    const [routeOptions, setRouteOptions] = useState<
+        Array<{
+            flight_number: string;
+            departure_time: string;
+            arrival_time: string;
+            day_span: number;
+            fa_flight_id?: string | null;
+            flight: FlightInput;
+        }>
+    >([]);
     // Days the arrival falls after departure (preserved when the date is moved).
     const [arrivalDayOffset, setArrivalDayOffset] = useState<number | null>(null);
     const [pendingFaFlightId, setPendingFaFlightId] = useState<string | null>(null);
@@ -77,6 +81,45 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         };
     }, [isOpen]);
 
+    const applyLookupFlight = (
+        f: FlightInput,
+        opts: {
+            daySpan?: number;
+            faFlightId?: string | null;
+            baseDate?: string;
+            /** Keep the user's origin/dest dates; only apply number + times (+ overnight dest). */
+            preserveUserDates?: boolean;
+        },
+    ) => {
+        const dep = normalizeWallClock(f.departure_time);
+        const arr = normalizeWallClock(f.arrival_time);
+        const span = opts.daySpan ?? daySpan(dep, arr);
+
+        setOrigin(f.origin_code);
+        setDestination(f.destination_code);
+        setOriginTime(dep.slice(11, 16));
+        setDestTime(arr.slice(11, 16));
+        setArrivalDayOffset(span);
+        setPendingFaFlightId(opts.faFlightId ?? null);
+        if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
+
+        if (opts.preserveUserDates) {
+            // Dates stay user-owned. Only align destDate when overnight (or missing).
+            if (originDate) {
+                if (span > 0 || !destDate) {
+                    setDestDate(addDays(originDate, span));
+                }
+            }
+        } else {
+            const baseDate = opts.baseDate || dep.slice(0, 10) || new Date().toISOString().slice(0, 10);
+            setOriginDate(baseDate);
+            setDestDate(addDays(baseDate, span));
+        }
+
+        setErrors({});
+        setRouteOptions([]);
+    };
+
     const handleLookup = async () => {
         const digits = flightNum.replace(/\D/g, "");
         if (!digits) {
@@ -87,6 +130,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         // departure date if present, otherwise today, to pick the schedule.
         const lookupDate = originDate || new Date().toISOString().slice(0, 10);
         setLookingUp(true);
+        setRouteOptions([]);
         try {
             const params = new URLSearchParams({ ident: `${AIRLINE_CODE}${digits}`, date: lookupDate });
             if (isHistoryMode) params.set("prefer_history", "1");
@@ -103,24 +147,12 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 return;
             }
             const f = data.flight as FlightInput;
-            const dep = normalizeWallClock(f.departure_time);
-            const arr = normalizeWallClock(f.arrival_time);
-            const span = typeof data.day_span === "number" ? data.day_span : daySpan(dep, arr);
-
-            // Keep the user's chosen departure date (they often book a month out,
-            // beyond AeroAPI's horizon). Fill route + times from the schedule and
-            // derive the arrival date from the overnight day-span.
-            const baseDate = lookupDate;
-            setOrigin(f.origin_code);
-            setOriginDate(baseDate);
-            setOriginTime(dep.slice(11, 16));
-            setDestination(f.destination_code);
-            setDestDate(addDays(baseDate, span));
-            setDestTime(arr.slice(11, 16));
-            setArrivalDayOffset(span);
-            setPendingFaFlightId(data.fa_flight_id ?? null);
-            if (f.flight_number) setFlightNum(f.flight_number.replace(/^\D+/g, ""));
-            setErrors({});
+            const span = typeof data.day_span === "number" ? data.day_span : undefined;
+            applyLookupFlight(f, {
+                daySpan: span,
+                faFlightId: data.fa_flight_id ?? null,
+                baseDate: lookupDate,
+            });
 
             const route = `${f.origin_code} → ${f.destination_code}`;
             if (data.source === "schedule") {
@@ -141,6 +173,82 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
         } finally {
             setLookingUp(false);
         }
+    };
+
+    const handleRouteLookup = async () => {
+        const originCode = origin.trim().toUpperCase();
+        const destCode = destination.trim().toUpperCase();
+        if (!validateAirport(originCode) || !validateAirport(destCode)) {
+            toast.error("Enter valid departure and arrival airport codes");
+            return;
+        }
+        if (originCode === destCode) {
+            toast.error("Origin and destination must differ");
+            return;
+        }
+        const lookupDate = originDate || new Date().toISOString().slice(0, 10);
+        setLookingUpRoute(true);
+        setRouteOptions([]);
+        try {
+            const params = new URLSearchParams({
+                origin: originCode,
+                destination: destCode,
+                date: lookupDate,
+            });
+            const res = await fetch(`/api/aeroapi/route-lookup?${params.toString()}`);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                if (res.status === 429) {
+                    toast.error("Flight lookup rate limited — try again in a moment");
+                } else {
+                    toast.error(typeof data?.error === "string" ? data.error : "Route lookup failed");
+                }
+                return;
+            }
+            if (!data.configured) {
+                toast.error("Flight lookup is not configured");
+                setAeroConfigured(false);
+                return;
+            }
+            if (!data.found || !Array.isArray(data.flights) || data.flights.length === 0) {
+                toast.error("No Emirates flights found for that route");
+                return;
+            }
+            const options = data.flights as typeof routeOptions;
+            const dateRelaxed = Boolean(data.date_relaxed);
+            const relaxedToast =
+                "Showing typical Emirates flights for this route — date left as entered";
+
+            if (options.length === 1) {
+                const opt = options[0];
+                applyLookupFlight(opt.flight, {
+                    daySpan: opt.day_span,
+                    faFlightId: opt.fa_flight_id ?? null,
+                    preserveUserDates: true,
+                });
+                toast.success(
+                    dateRelaxed
+                        ? relaxedToast
+                        : `Found ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`,
+                );
+                return;
+            }
+            setRouteOptions(options);
+            toast.success(dateRelaxed ? relaxedToast : `${options.length} flights found — pick one`);
+        } catch {
+            toast.error("Could not find flights for that route");
+        } finally {
+            setLookingUpRoute(false);
+        }
+    };
+
+    const selectRouteOption = (opt: (typeof routeOptions)[number]) => {
+        applyLookupFlight(opt.flight, {
+            daySpan: opt.day_span,
+            faFlightId: opt.fa_flight_id ?? null,
+            preserveUserDates: true,
+        });
+        toast.success(`Selected ${opt.flight_number} · ${opt.departure_time.slice(11, 16)}`);
     };
 
     // Focus management: trap focus while open, close on Escape, restore on close.
@@ -202,6 +310,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestTime(arr.slice(11, 16));
                 setArrivalDayOffset(daySpan(dep, arr));
                 setPendingFaFlightId(flightToEdit.fa_flight_id ?? null);
+                setRouteOptions([]);
 
                 setErrors({});
             } else {
@@ -216,6 +325,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                 setDestTime("");
                 setArrivalDayOffset(null);
                 setPendingFaFlightId(null);
+                setRouteOptions([]);
                 setErrors({});
             }
         }
@@ -254,30 +364,31 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
     const [submitting, setSubmitting] = useState(false);
 
-    // Calendar days the arrival lands after departure — surfaces the overnight
-    // span the date-carry logic already preserves behind the scenes.
-    const arrivalSpanDays = originDate && destDate ? Math.max(0, daySpan(originDate, destDate)) : 0;
-
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         const newErrors: { origin?: string; destination?: string } = {};
 
         if (!validateAirport(origin)) {
-            newErrors.origin = "Unknown airport code";
+            newErrors.origin = "Invalid";
         }
         if (!validateAirport(destination)) {
-            newErrors.destination = "Unknown airport code";
+            newErrors.destination = "Invalid";
         }
 
         const paddedOriginTime = padTimeInput(originTime);
         const paddedDestTime = padTimeInput(destTime);
         const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
         if (!timeRegex.test(paddedOriginTime)) {
-            newErrors.origin = newErrors.origin ?? "Enter a valid time (HH:MM)";
+            newErrors.origin = "Check Time";
         }
         if (!timeRegex.test(paddedDestTime)) {
-            newErrors.destination = newErrors.destination ?? "Enter a valid time (HH:MM)";
+            newErrors.destination = "Check Time";
+        }
+        if (!flightNum.replace(/\D/g, "")) {
+            toast.error("Enter a flight number or find flights for the route");
+            setErrors(newErrors);
+            return;
         }
 
         if (Object.keys(newErrors).length > 0) {
@@ -341,30 +452,15 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                         initial={{ opacity: 0, y: 100, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 100, scale: 0.95 }}
-                        transition={spring.smooth}
-                        drag={isMobile ? "y" : false}
-                        dragControls={dragControls}
-                        dragListener={false}
-                        dragConstraints={{ top: 0, bottom: 0 }}
-                        dragElastic={{ top: 0, bottom: 0.6 }}
-                        dragMomentum={false}
-                        onDragEnd={(_: unknown, info: PanInfo) => {
-                            if (info.offset.y > 120 || info.velocity.y > 600) onClose();
-                        }}
+                        transition={{ type: "spring", stiffness: 260, damping: 20 }}
                         className="fixed inset-x-0 bottom-0 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-2xl bg-[#0F0F0F] border-t border-x md:border border-white/10 rounded-t-[32px] rounded-b-none md:rounded-[32px] z-[70] shadow-2xl flex flex-col max-h-[85vh] md:max-h-[90vh] overflow-hidden"
                     >
                         {/* Decorative background glow - kept in main container so it stays fixed */}
                         <div className="absolute top-0 right-0 w-64 h-64 bg-emirates-red/5 blur-[80px] rounded-full pointer-events-none -z-10" />
 
-                        {/* Fixed Header (doubles as the sheet's drag handle on mobile) */}
-                        <div
-                            className="flex-none z-20 bg-[#0F0F0F] border-b border-white/5 relative touch-none md:touch-auto"
-                            onPointerDown={(e) => {
-                                if (isMobile) dragControls.start(e);
-                            }}
-                        >
-                            <div className="mx-auto mt-3 mb-1 h-1.5 w-10 rounded-full bg-white/15 md:hidden" aria-hidden />
-                            <div className="flex items-center justify-between px-5 md:px-8 pt-2 pb-4 md:pt-8 md:pb-6">
+                        {/* Fixed Header */}
+                        <div className="flex-none z-20 bg-[#0F0F0F] border-b border-white/5 flex items-center justify-between px-5 md:px-8 pt-5 pb-4 md:pt-8 md:pb-6 relative">
+                            {/* Gradient mask for smooth content fade under header if we wanted, but solid buffer is safer for 'fixed' feel */}
                             <div className="flex flex-col">
                                 <h2 id="add-trip-title" className="text-xl font-bold text-white tracking-widest uppercase">
                                     {flightToEdit ? "Edit Journey Details" : (isHistoryMode ? "Log Past Journey" : "NEW JOURNEY")}
@@ -375,14 +471,13 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                     </span>
                                 )}
                             </div>
-                            <button onClick={onClose} aria-label="Close" className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                            <button onClick={onClose} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-white/60 hover:text-white transition-colors">
                                 <X size={20} />
                             </button>
-                            </div>
                         </div>
 
                         {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar px-5 py-6 md:p-8">
+                        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar p-5 md:p-8 pt-6 md:pt-8">
                             <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8 pb-4">
                                 {/* 1. Header: Flight Number */}
                                 <div className="flex flex-col items-center justify-center border-b border-white/5 pb-6 md:pb-8">
@@ -398,7 +493,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                             placeholder="000"
                                             className="bg-transparent border-none text-4xl w-32 font-bold text-white tracking-tighter placeholder:text-white/10 focus:outline-none text-center p-0"
                                             autoFocus
-                                            required
                                         />
                                     </div>
 
@@ -425,7 +519,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                     <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-white/5 -translate-x-1/2 hidden md:block" />
 
                                     {/* LEFT: ORIGIN */}
-                                    <div className="space-y-5">
+                                    <div className="space-y-4 md:space-y-5">
                                         {/* Airport Code */}
                                         <div className="space-y-2">
                                             <label htmlFor="origin-input" className="text-[10px] uppercase tracking-widest text-emirates-red font-bold flex items-center gap-2">
@@ -437,6 +531,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 value={origin}
                                                 onChange={(v) => {
                                                     setOrigin(v);
+                                                    setRouteOptions([]);
                                                     if (errors.origin) setErrors(prev => ({ ...prev, origin: undefined }));
                                                 }}
                                                 placeholder="DXB"
@@ -459,7 +554,10 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     id="origin-date"
                                                     type="date"
                                                     value={originDate}
-                                                    onChange={(e) => handleOriginDateChange(e.target.value)}
+                                                    onChange={(e) => {
+                                                        handleOriginDateChange(e.target.value);
+                                                        setRouteOptions([]);
+                                                    }}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all [color-scheme:dark] [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer appearance-none [-webkit-appearance:none] min-w-0 box-border"
                                                     required
                                                 />
@@ -480,7 +578,6 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={originTime}
                                                     onChange={(e) => handleTimeChange(e.target.value, setOriginTime)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-emirates-red/30 transition-all placeholder:text-white/10"
-                                                    required
                                                 />
                                             </div>
                                         </div>
@@ -488,7 +585,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
 
                                     {/* RIGHT: DESTINATION */}
-                                    <div className="space-y-5">
+                                    <div className="space-y-4 md:space-y-5">
                                         {/* Airport Code */}
                                         <div className="space-y-2">
                                             <label htmlFor="dest-input" className="text-[10px] uppercase tracking-widest text-dubai-gold font-bold flex items-center gap-2 justify-start md:justify-end">
@@ -501,6 +598,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                 value={destination}
                                                 onChange={(v) => {
                                                     setDestination(v);
+                                                    setRouteOptions([]);
                                                     if (errors.destination) setErrors(prev => ({ ...prev, destination: undefined }));
                                                 }}
                                                 placeholder="LHR"
@@ -516,22 +614,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Date */}
                                         <div className="space-y-1">
-                                            <div className="h-5 flex items-center gap-2 ml-1 md:ml-0 md:mr-1 md:flex-row-reverse">
-                                                <label htmlFor="dest-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold">Date</label>
-                                                <AnimatePresence>
-                                                    {arrivalSpanDays > 0 && (
-                                                        <motion.span
-                                                            initial={{ opacity: 0, scale: 0.8 }}
-                                                            animate={{ opacity: 1, scale: 1 }}
-                                                            exit={{ opacity: 0, scale: 0.8 }}
-                                                            transition={spring.smooth}
-                                                            className="px-1.5 py-0.5 rounded-full bg-dubai-gold/15 border border-dubai-gold/30 text-dubai-gold text-[9px] font-bold tracking-wider"
-                                                        >
-                                                            +{arrivalSpanDays} DAY{arrivalSpanDays > 1 ? "S" : ""}
-                                                        </motion.span>
-                                                    )}
-                                                </AnimatePresence>
-                                            </div>
+                                            <label htmlFor="dest-date" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:mr-1 text-left md:text-right block">Date</label>
                                             <div className="relative">
                                                 <Calendar size={16} className="absolute left-4 md:right-4 md:left-auto top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
@@ -540,7 +623,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={destDate}
                                                     min={originDate}
                                                     onChange={(e) => setDestDate(e.target.value)}
-                                                    className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 md:pl-4 md:pr-12 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all [color-scheme:dark] text-left md:text-right [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer appearance-none [-webkit-appearance:none] min-w-0 box-border"
+                                                    className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 md:pl-4 md:pr-12 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all [color-scheme:dark] text-left md:text-right [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full cursor-pointer"
                                                     required
                                                 />
                                             </div>
@@ -548,7 +631,7 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
 
                                         {/* Time */}
                                         <div className="space-y-1">
-                                            <label htmlFor="dest-time" className="h-5 flex items-center md:justify-end text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:ml-0 md:mr-1">Time</label>
+                                            <label htmlFor="dest-time" className="text-[10px] uppercase tracking-wider text-white/30 font-bold ml-1 md:mr-1 text-left md:text-right block">Time</label>
                                             <div className="relative">
                                                 <Clock size={16} className="absolute left-4 md:right-4 md:left-auto top-1/2 -translate-y-1/2 text-white/20 pointer-events-none" />
                                                 <input
@@ -560,12 +643,56 @@ export default function AddTripModal({ isOpen, onClose, onAdd, isHistoryMode = f
                                                     value={destTime}
                                                     onChange={(e) => handleTimeChange(e.target.value, setDestTime)}
                                                     className="w-full h-12 bg-white/5 border border-white/10 rounded-xl pl-12 pr-4 md:pl-4 md:pr-12 text-white text-sm font-bold tracking-wide uppercase focus:outline-none focus:border-dubai-gold/30 transition-all placeholder:text-white/10 text-left md:text-right"
-                                                    required
                                                 />
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+
+                                {aeroConfigured && (
+                                    <div className="flex flex-col gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={handleRouteLookup}
+                                            disabled={lookingUpRoute || lookingUp}
+                                            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-white/5 border border-white/10 text-white/80 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                        >
+                                            {lookingUpRoute ? (
+                                                <Loader2 size={14} className="animate-spin" />
+                                            ) : (
+                                                <Search size={14} />
+                                            )}
+                                            {lookingUpRoute ? "Finding flights..." : "Find flights for route"}
+                                        </button>
+
+                                        {routeOptions.length > 1 && (
+                                            <div
+                                                className="rounded-2xl border border-white/10 bg-white/[0.03] p-2 max-h-48 overflow-y-auto custom-scrollbar"
+                                                role="listbox"
+                                                aria-label="Matching flights"
+                                            >
+                                                {routeOptions.map((opt) => (
+                                                    <button
+                                                        key={`${opt.flight_number}-${opt.departure_time}`}
+                                                        type="button"
+                                                        role="option"
+                                                        onClick={() => selectRouteOption(opt)}
+                                                        className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl text-left hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                                                    >
+                                                        <span className="text-sm font-black tracking-tight text-white">
+                                                            {opt.flight_number}
+                                                        </span>
+                                                        <span className="text-xs font-bold font-mono text-white/60">
+                                                            {opt.departure_time.slice(11, 16)}
+                                                            <span className="text-white/30 mx-1.5">→</span>
+                                                            {opt.arrival_time.slice(11, 16)}
+                                                        </span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
 
                                 <button
                                     type="submit"

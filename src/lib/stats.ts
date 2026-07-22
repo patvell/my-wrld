@@ -187,8 +187,22 @@ export function formatCountdown(ms: number): string {
   return `${minutes}M`;
 }
 
-/** Compact distance for stat chips: 1,234 KM under 10k, "12.4K KM" above. */
+/**
+ * Compact number for stat chips (no unit): 999 → "999", 8200 → "8.2K",
+ * 1_100_000 → "1.1M". Trailing ".0" is trimmed.
+ */
+export function formatCompactCount(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) {
+    return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  }
+  if (abs >= 1_000) {
+    return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  }
+  return Math.round(n).toLocaleString("en-US");
+}
+
+/** Compact distance for labels that still want a unit: "8.2K KM", "1,234 KM". */
 export function formatDistanceKm(km: number): string {
-  if (km >= 10_000) return `${(km / 1000).toFixed(1).replace(/\.0$/, "")}K KM`;
-  return `${Math.round(km).toLocaleString("en-US")} KM`;
+  return `${formatCompactCount(km)} KM`;
 }

@@ -6,6 +6,7 @@ import {
   groupJourneysByMonth,
   nextCountdown,
   formatCountdown,
+  formatCompactCount,
   formatDistanceKm,
 } from "@/lib/stats";
 
@@ -123,7 +124,17 @@ describe("format helpers", () => {
   });
 
   it("formats distances", () => {
-    expect(formatDistanceKm(1234)).toBe("1,234 KM");
+    expect(formatDistanceKm(500)).toBe("500 KM");
+    expect(formatDistanceKm(1234)).toBe("1.2K KM");
     expect(formatDistanceKm(12_400)).toBe("12.4K KM");
+    expect(formatDistanceKm(1_100_000)).toBe("1.1M KM");
+  });
+
+  it("formats compact counts without units", () => {
+    expect(formatCompactCount(48)).toBe("48");
+    expect(formatCompactCount(999)).toBe("999");
+    expect(formatCompactCount(1000)).toBe("1K");
+    expect(formatCompactCount(8200)).toBe("8.2K");
+    expect(formatCompactCount(1_100_000)).toBe("1.1M");
   });
 });

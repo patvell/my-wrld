@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
 import GlobalPulse from "@/components/GlobalPulse";
 import PillMenu from "@/components/PillMenu";
@@ -11,7 +11,7 @@ import JourneyList from "@/components/JourneyList";
 import HistoryView from "@/components/HistoryView";
 import { Flight, FlightInput, PersonaMode } from "@/types";
 import { groupFlightsIntoJourneys } from "@/lib/flightGrouping";
-import { getCurrentLocation, isPast } from "@/lib/time";
+import { getCurrentLocation, getNextLiveFlightId, isPast } from "@/lib/time";
 import { PARTNER_CITY, PARTNER_CODE } from "@/lib/config";
 import { getCountryTheme } from "@/lib/countryTheme";
 import { isLightBackground } from "@/lib/colors";
@@ -54,15 +54,18 @@ export default function Home() {
   const [currentPersona, setCurrentPersona] = useState<PersonaMode>("plane");
   const [historySortAsc, setHistorySortAsc] = useState(false);
   const [activeOpenCardId, setActiveOpenCardId] = useState<string | null>(null);
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
 
-  const currentLocation = useMemo(() => getCurrentLocation(flights, now), [flights, now]);
+  const clock = now ?? new Date(0);
+
+  const currentLocation = useMemo(() => getCurrentLocation(flights, clock), [flights, clock]);
   const currentLocationCode = currentPersona === "home" ? PARTNER_CODE : currentLocation.code;
   const countryTheme = loading
     ? getCountryTheme(PARTNER_CODE)
@@ -74,10 +77,20 @@ export default function Home() {
   const softTextClass = isLightBg ? "text-neutral-700" : "text-white/60";
   const iconMutedClass = isLightBg ? "text-neutral-500" : "text-white opacity-50";
 
-  const upcomingFlights = useMemo(() => flights.filter((f) => !isPast(f, now)), [flights, now]);
+  const upcomingFlights = useMemo(
+    () => (now ? flights.filter((f) => !isPast(f, now)) : []),
+    [flights, now],
+  );
   const upcomingJourneys = useMemo(() => groupFlightsIntoJourneys(upcomingFlights, true), [upcomingFlights]);
+  const liveFlightId = useMemo(
+    () => (now ? getNextLiveFlightId(upcomingFlights, now) : null),
+    [upcomingFlights, now],
+  );
 
-  const pastFlights = useMemo(() => flights.filter((f) => isPast(f, now)), [flights, now]);
+  const pastFlights = useMemo(
+    () => (now ? flights.filter((f) => isPast(f, now)) : []),
+    [flights, now],
+  );
   const pastJourneys = useMemo(() => groupFlightsIntoJourneys(pastFlights, historySortAsc), [pastFlights, historySortAsc]);
 
   useEffect(() => {
@@ -118,6 +131,14 @@ export default function Home() {
       if (!silent) setLoading(false);
     }
   };
+
+  const handleFlightLanded = useCallback((id: string) => {
+    setFlights((prev) =>
+      prev.map((f) =>
+        f.id === id ? { ...f, status: "completed" as const, type: "past" as const } : f,
+      ),
+    );
+  }, []);
 
   useEffect(() => {
     if (!loading) {
@@ -248,95 +269,128 @@ export default function Home() {
     >
       <LiquidBackground theme={countryTheme} />
 
-      {/* inert (not just pointer-events) — descendants re-enable hit-testing
-          with pointer-events-auto, and hidden panels must not take focus. */}
-      <motion.div
+      {/* Native wrappers carry `inert` — framer-motion may not forward it, and
+          descendants with pointer-events-auto re-enable hits unless gated. */}
+      <div
         aria-hidden={activeTab !== "home"}
-        inert={activeTab !== "home"}
-        animate={{
-          opacity: activeTab === "home" ? 1 : 0,
-          y: activeTab === "home" ? 0 : -12,
-        }}
-        transition={TAB_FADE}
-        className="absolute top-0 left-0 right-0 z-50 pointer-events-none"
+        {...(activeTab !== "home" ? { inert: true } : {})}
+        className="absolute top-0 left-0 right-0 z-50"
         style={{ pointerEvents: activeTab === "home" ? "auto" : "none" }}
       >
-        <GlobalPulse
-          faCity={currentLocation.city}
-          faCode={currentLocation.code}
-          partnerCity={PARTNER_CITY}
-          partnerCode={PARTNER_CODE}
-          persona={currentPersona}
-          onTogglePersona={() => setCurrentPersona((prev) => (prev === "home" ? "plane" : "home"))}
-          isLoading={loading}
-        />
-      </motion.div>
-
-      <motion.div
-        aria-hidden={activeTab !== "home"}
-        inert={activeTab !== "home"}
-        animate={{
-          opacity: activeTab === "home" ? 1 : 0,
-          y: activeTab === "home" ? 0 : -8,
-        }}
-        transition={TAB_FADE}
-        className="absolute top-[calc(max(env(safe-area-inset-top,0px),40px)+300px)] left-0 right-0 z-40 flex justify-center pointer-events-none"
-        style={{ pointerEvents: activeTab === "home" ? "auto" : "none" }}
-      >
-        <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 pointer-events-auto">
-          <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase", mutedTextClass)}>Upcoming Trips ({upcomingFlights.length})</h3>
-          <div className={cn("h-[1px] flex-1 ml-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
-        </div>
-      </motion.div>
-
-      <motion.div
-        aria-hidden={activeTab !== "history"}
-        inert={activeTab !== "history"}
-        animate={{
-          opacity: activeTab === "history" ? 1 : 0,
-          y: activeTab === "history" ? 0 : -8,
-        }}
-        transition={TAB_FADE}
-        className="absolute top-[max(calc(env(safe-area-inset-top,0px)+8px),2rem)] left-0 right-0 z-40 flex justify-center pointer-events-none"
-        style={{ pointerEvents: activeTab === "history" ? "auto" : "none" }}
-      >
-        <div className="w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent pointer-events-auto">
-          <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase", mutedTextClass)}>Past Trips ({pastFlights.length})</h3>
-          <div className={cn("h-[1px] flex-1 mx-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
-          <button
-            onClick={() => setHistorySortAsc(!historySortAsc)}
-            className={cn(mutedTextClass, isLightBg ? "hover:text-neutral-900" : "hover:text-white", "transition-colors")}
-            title={historySortAsc ? "Sort Oldest to Newest" : "Sort Newest to Oldest"}
-          >
-            <ArrowUpDown size={14} strokeWidth={3} />
-          </button>
-        </div>
-      </motion.div>
-
-      <div className="flex-1 w-full max-w-full relative overflow-hidden">
         <motion.div
-          aria-hidden={activeTab !== "world"}
-          inert={activeTab !== "world"}
-          animate={{ opacity: activeTab === "world" ? 1 : 0, x: panelShift("world") }}
+          animate={{
+            opacity: activeTab === "home" ? 1 : 0,
+            y: activeTab === "home" ? 0 : -12,
+          }}
           transition={TAB_FADE}
-          className="absolute inset-0 w-full h-full flex flex-col"
-          style={{ pointerEvents: activeTab === "world" ? "auto" : "none" }}
+          className="pointer-events-none"
         >
-          <WorldGlobe
-            flights={flights}
-            atmosphereColor={countryTheme.effectiveBg}
-            chromeColor={countryTheme.chromeColor}
+          <GlobalPulse
+            faCity={currentLocation.city}
+            faCode={currentLocation.code}
+            partnerCity={PARTNER_CITY}
+            partnerCode={PARTNER_CODE}
+            persona={currentPersona}
+            onTogglePersona={() => setCurrentPersona((prev) => (prev === "home" ? "plane" : "home"))}
+            isLoading={loading}
+            interactive={activeTab === "home"}
           />
         </motion.div>
+      </div>
 
+      <div
+        aria-hidden={activeTab !== "home"}
+        {...(activeTab !== "home" ? { inert: true } : {})}
+        className="absolute top-[calc(max(env(safe-area-inset-top,0px),40px)+300px)] left-0 right-0 z-40 flex justify-center"
+        style={{ pointerEvents: activeTab === "home" ? "auto" : "none" }}
+      >
         <motion.div
-          aria-hidden={activeTab !== "home"}
-          inert={activeTab !== "home"}
-          animate={{ opacity: activeTab === "home" ? 1 : 0, x: panelShift("home") }}
+          animate={{
+            opacity: activeTab === "home" ? 1 : 0,
+            y: activeTab === "home" ? 0 : -8,
+          }}
           transition={TAB_FADE}
-          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[calc(max(env(safe-area-inset-top,0px),40px)+380px)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+10rem)] flex flex-col items-center gap-6"
-          style={{ ...homeScrollMask, pointerEvents: activeTab === "home" ? "auto" : "none" }}
+          className="w-full flex justify-center pointer-events-none"
         >
+          <div
+            className={cn(
+              "w-full max-w-sm flex items-center justify-between px-6 py-4",
+              activeTab === "home" && "pointer-events-auto",
+            )}
+          >
+            <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase", mutedTextClass)}>Upcoming Trips ({upcomingFlights.length})</h3>
+            <div className={cn("h-[1px] flex-1 ml-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
+          </div>
+        </motion.div>
+      </div>
+
+      <div
+        aria-hidden={activeTab !== "history"}
+        {...(activeTab !== "history" ? { inert: true } : {})}
+        className="absolute top-[max(calc(env(safe-area-inset-top,0px)+8px),2rem)] left-0 right-0 z-40 flex justify-center"
+        style={{ pointerEvents: activeTab === "history" ? "auto" : "none" }}
+      >
+        <motion.div
+          animate={{
+            opacity: activeTab === "history" ? 1 : 0,
+            y: activeTab === "history" ? 0 : -8,
+          }}
+          transition={TAB_FADE}
+          className="w-full flex justify-center pointer-events-none"
+        >
+          <div
+            className={cn(
+              "w-full max-w-sm flex items-center justify-between px-6 py-4 bg-transparent",
+              activeTab === "history" && "pointer-events-auto",
+            )}
+          >
+            <h3 className={cn("text-xs font-black tracking-[0.3em] uppercase", mutedTextClass)}>Past Trips ({pastFlights.length})</h3>
+            <div className={cn("h-[1px] flex-1 mx-6", isLightBg ? "bg-neutral-300/60" : "bg-white/10")} />
+            <button
+              type="button"
+              onClick={() => setHistorySortAsc(!historySortAsc)}
+              tabIndex={activeTab === "history" ? 0 : -1}
+              className={cn(mutedTextClass, isLightBg ? "hover:text-neutral-900" : "hover:text-white", "transition-colors")}
+              title={historySortAsc ? "Sort Oldest to Newest" : "Sort Newest to Oldest"}
+            >
+              <ArrowUpDown size={14} strokeWidth={3} />
+            </button>
+          </div>
+        </motion.div>
+      </div>
+
+      <div className="flex-1 w-full max-w-full relative overflow-hidden">
+        <div
+          aria-hidden={activeTab !== "world"}
+          {...(activeTab !== "world" ? { inert: true } : {})}
+          className="absolute inset-0 w-full h-full"
+          style={{ pointerEvents: activeTab === "world" ? "auto" : "none" }}
+        >
+          <motion.div
+            animate={{ opacity: activeTab === "world" ? 1 : 0, x: panelShift("world") }}
+            transition={TAB_FADE}
+            className="absolute inset-0 w-full h-full flex flex-col"
+          >
+            <WorldGlobe
+              flights={flights}
+              atmosphereColor={countryTheme.effectiveBg}
+              chromeColor={countryTheme.chromeColor}
+            />
+          </motion.div>
+        </div>
+
+        <div
+          aria-hidden={activeTab !== "home"}
+          {...(activeTab !== "home" ? { inert: true } : {})}
+          className="absolute inset-0 w-full h-full"
+          style={{ pointerEvents: activeTab === "home" ? "auto" : "none" }}
+        >
+          <motion.div
+            animate={{ opacity: activeTab === "home" ? 1 : 0, x: panelShift("home") }}
+            transition={TAB_FADE}
+            className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[calc(max(env(safe-area-inset-top,0px),40px)+380px)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+10rem)] flex flex-col items-center gap-6"
+            style={homeScrollMask}
+          >
           {loading ? (
             <div className="flex flex-col gap-6 w-full items-center">
               {[1, 2, 3].map((i) => (
@@ -351,13 +405,16 @@ export default function Home() {
             <>
               <JourneyList
                 journeys={upcomingJourneys}
-                now={now}
+                now={clock}
                 activeOpenCardId={activeOpenCardId}
                 onToggleCard={handleCardToggle}
                 onDelete={handleDeleteTrip}
                 onEdit={handleEditTrip}
                 showLiveStatus
+                liveFlightId={liveFlightId}
+                onLanded={handleFlightLanded}
                 emphasizeFirst
+                referenceCode={currentLocationCode}
                 keyPrefix="upcoming"
               />
               {upcomingJourneys.length === 0 && (
@@ -367,16 +424,21 @@ export default function Home() {
               )}
             </>
           )}
-        </motion.div>
+          </motion.div>
+        </div>
 
-        <motion.div
+        <div
           aria-hidden={activeTab !== "history"}
-          inert={activeTab !== "history"}
-          animate={{ opacity: activeTab === "history" ? 1 : 0, x: panelShift("history") }}
-          transition={TAB_FADE}
-          className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[max(calc(env(safe-area-inset-top,0px)+72px),6rem)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+8rem)] flex flex-col items-center gap-6"
-          style={{ ...historyScrollMask, pointerEvents: activeTab === "history" ? "auto" : "none" }}
+          {...(activeTab !== "history" ? { inert: true } : {})}
+          className="absolute inset-0 w-full h-full"
+          style={{ pointerEvents: activeTab === "history" ? "auto" : "none" }}
         >
+          <motion.div
+            animate={{ opacity: activeTab === "history" ? 1 : 0, x: panelShift("history") }}
+            transition={TAB_FADE}
+            className="absolute inset-0 w-full h-full overflow-y-scroll overflow-x-hidden no-scrollbar pt-[max(calc(env(safe-area-inset-top,0px)+72px),6rem)] px-4 pb-[calc(env(safe-area-inset-bottom,0px)+8rem)] flex flex-col items-center gap-6"
+            style={historyScrollMask}
+          >
           {loading ? (
             <div className="flex flex-col gap-6 w-full items-center">
               {[1, 2, 3].map((i) => (
@@ -392,7 +454,7 @@ export default function Home() {
               <HistoryView
                 journeys={pastJourneys}
                 flights={pastFlights}
-                now={now}
+                now={clock}
                 activeOpenCardId={activeOpenCardId}
                 onToggleCard={handleCardToggle}
                 onDelete={handleDeleteTrip}
@@ -409,7 +471,8 @@ export default function Home() {
               )}
             </>
           )}
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
 
       <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center pointer-events-none pb-[env(safe-area-inset-bottom)]">
