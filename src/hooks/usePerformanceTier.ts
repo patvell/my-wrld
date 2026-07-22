@@ -27,8 +27,14 @@ function readTier(): PerformanceTier {
   return computeTier(mobileQuery.matches, motionQuery.matches);
 }
 
+/**
+ * Performance tier for animation/blob density.
+ * IMPORTANT: always start with a stable SSR default ("full") and only read
+ * matchMedia after mount — otherwise narrow preview panes hydrate with
+ * "mobile" and Next.js reports attribute mismatches (Turbopack overlay).
+ */
 export function usePerformanceTier() {
-  const [tier, setTier] = useState<PerformanceTier>(readTier);
+  const [tier, setTier] = useState<PerformanceTier>("full");
 
   useEffect(() => {
     const mobileQuery = getMobileQuery();

@@ -505,14 +505,17 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
 
       <AnimatePresence>
         {statsOpen && (
-          <>
-            <motion.button
+          <motion.div
+            key="world-stats-sheet"
+            className="absolute inset-0 z-30"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <button
               type="button"
               aria-label="Close stats"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-30 bg-black/60 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => setStatsOpen(false)}
             />
             <motion.div
@@ -568,7 +571,7 @@ export default function WorldGlobe({ flights, atmosphereColor, chromeColor }: Wo
                 />
               </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
 
