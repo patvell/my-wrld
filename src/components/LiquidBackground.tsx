@@ -85,9 +85,9 @@ function BackgroundLayer({
 
 export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
     const { isFullExperience, isMobile } = usePerformanceTier();
-    // Blobs stay visible; keep blur lighter on narrow viewports so the first
-    // paint stays snappy even though product UX is otherwise full experience.
-    const showBlobs = true;
+    // Gradients paint immediately; defer heavy blurred blobs until after first paint.
+    const [blobsReady, setBlobsReady] = useState(false);
+    const showBlobs = blobsReady;
     const blobBlurPx = isFullExperience && !isMobile ? 96 : 56;
     const enableCrossfade = isFullExperience;
 
@@ -105,6 +105,25 @@ export default function LiquidBackground({ theme }: LiquidBackgroundProps) {
     const transitionGenRef = useRef(0);
     const completingGenRef = useRef(0);
     const rafRef = useRef<number | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        const enable = () => {
+            if (!cancelled) setBlobsReady(true);
+        };
+        const idle =
+            typeof window !== "undefined" && "requestIdleCallback" in window
+                ? window.requestIdleCallback(enable, { timeout: 500 })
+                : null;
+        const fallback = window.setTimeout(enable, 200);
+        return () => {
+            cancelled = true;
+            if (idle != null && "cancelIdleCallback" in window) {
+                window.cancelIdleCallback(idle);
+            }
+            window.clearTimeout(fallback);
+        };
+    }, []);
 
     const cancelPendingRaf = () => {
         if (rafRef.current !== null) {

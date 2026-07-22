@@ -55,13 +55,18 @@ export default function Home() {
   const [historySortAsc, setHistorySortAsc] = useState(false);
   const [activeOpenCardId, setActiveOpenCardId] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
-  const [isReady, setIsReady] = useState(false);
+  /** Keep World mounted after first visit so tab switches stay instant. */
+  const [worldVisited, setWorldVisited] = useState(false);
 
   useEffect(() => {
     setNow(new Date());
     const timer = setInterval(() => setNow(new Date()), 60000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "world") setWorldVisited(true);
+  }, [activeTab]);
 
   const clock = now ?? new Date(0);
 
@@ -141,14 +146,6 @@ export default function Home() {
         f.id === id ? { ...f, status: "completed" as const, type: "past" as const } : f,
       ),
     );
-  }, []);
-
-  useEffect(() => {
-    // Reveal the shell immediately so mobile users aren't stuck staring at an
-    // empty theme wash while /api/flights (Turso) cold-starts. List content
-    // still uses `loading` skeletons independently.
-    const timer = setTimeout(() => setIsReady(true), 50);
-    return () => clearTimeout(timer);
   }, []);
 
   const handleTabChange = (newTab: "home" | "history" | "settings" | "world") => {
@@ -261,10 +258,7 @@ export default function Home() {
   useThemeColor(countryTheme.effectiveBg);
 
   return (
-    <motion.main
-      initial={{ opacity: 0 }}
-      animate={{ opacity: isReady ? 1 : 0 }}
-      transition={{ duration: 0.4, ease: "easeInOut" }}
+    <main
       className={cn(
         "h-[100dvh] min-h-[100dvh] w-full font-sans selection:bg-emirates-red/30 relative overflow-hidden flex flex-col",
         isLightBg ? "text-neutral-900" : "text-white"
@@ -375,11 +369,13 @@ export default function Home() {
             transition={TAB_FADE}
             className="absolute inset-0 w-full h-full flex flex-col"
           >
-            <WorldGlobe
-              flights={flights}
-              atmosphereColor={countryTheme.effectiveBg}
-              chromeColor={countryTheme.chromeColor}
-            />
+            {worldVisited ? (
+              <WorldGlobe
+                flights={flights}
+                atmosphereColor={countryTheme.effectiveBg}
+                chromeColor={countryTheme.chromeColor}
+              />
+            ) : null}
           </motion.div>
         </div>
 
@@ -500,6 +496,6 @@ export default function Home() {
         isHistoryMode={activeTab === "history"}
         flightToEdit={flights.find((f) => f.id === editingFlightId) || null}
       />
-    </motion.main>
+    </main>
   );
 }

@@ -6,7 +6,8 @@
   --color-glass: rgba(255, 255, 255, 0.1);
   --color-glass-dark: rgba(0, 0, 0, 0.3);
 
-  --font-sans: "SF Pro Display", var(--font-inter), var(--font-geist-sans);
+  --font-sans: "SF Pro Display", var(--font-inter), system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 :root {

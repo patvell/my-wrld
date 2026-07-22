@@ -1,21 +1,13 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
+import { Inter } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 
+/** Single webfont — mobile-first; system UI/mono cover the rest. */
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
-});
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -41,10 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} ${inter.variable} antialiased`}
-        suppressHydrationWarning
-      >
+      <body className={`${inter.variable} antialiased`} suppressHydrationWarning>
         {children}
         <Toaster theme="dark" position="top-center" richColors />
       </body>
